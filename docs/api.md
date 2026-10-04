@@ -1,6 +1,7 @@
 # Goodtown API — contract v1
 
 Base URL: `https://api.goodtown.app` (prod) · `http://localhost:8787` (wrangler dev).
+Interactive reference: `<base>/docs` · machine-readable: `<base>/openapi.json` (generated from the code; this file is the human-written contract and the Android mapping).
 All responses are JSON. Success: `{ ok: true, ... }`. Failure: `{ ok: false, code, message?, details? }` — **clients switch on `code`**.
 
 Auth: Bearer token in `Authorization: Bearer <token>`. The token is issued by Better Auth after a verified OTP (response header `set-auth-token`). Sessions last 90 days.
@@ -14,7 +15,7 @@ Auth: Bearer token in `Authorization: Bearer <token>`. The token is issued by Be
 | `invalid_name` | 422 | name failed server rules → back to AuthName |
 | `invalid_date` | 422 | birthdate does not exist / future / < 1900 |
 | `already_completed` | 409 | birthday already set — immutable |
-| `validation` | 422/409 | other input problem (`message` explains) |
+| `validation` | 400/422/409 | 400 = request failed schema validation (`details` = Zod issues); 422/409 = other input problem (`message` explains) |
 | `not_found` | 404 | unknown town / neighborhood |
 | `rate_limited` | 429 | too many OTP sends / attempts (Better Auth) |
 | `internal` | 500 | |

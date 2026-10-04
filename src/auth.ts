@@ -1,5 +1,5 @@
 import { betterAuth } from 'better-auth'
-import { bearer, emailOTP } from 'better-auth/plugins'
+import { bearer, emailOTP, openAPI } from 'better-auth/plugins'
 import { mongodbAdapter } from '@better-auth/mongo-adapter'
 import type { Env } from './env'
 import { getDb, getMongo } from './db/client'
@@ -59,6 +59,8 @@ function buildAuth(env: Env) {
         },
       }),
       bearer(),
+      // Only used to pull the OTP/session endpoints into our /openapi.json; the Scalar page it ships is off.
+      openAPI({ disableDefaultReference: true }),
     ],
   })
 }

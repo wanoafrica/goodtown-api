@@ -10,6 +10,8 @@ npm install
 cp .dev.vars.example .dev.vars        # fill MONGODB_URI, BETTER_AUTH_SECRET, SENDGRID_API_KEY
 npm run seed:towns                    # Kansas towns + indexes (idempotent; reads .dev.vars)
 npm run dev                           # http://localhost:8787
+#   http://localhost:8787/docs          interactive API reference (Scalar)
+#   http://localhost:8787/openapi.json  OpenAPI 3.1 document (generated from the Zod validators)
 ```
 `OTP_DEBUG_LOG=1` in `.dev.vars` prints codes to the console instead of emailing.
 
@@ -38,6 +40,13 @@ src/
 scripts/seed-towns.ts
 test/               vitest unit tests for the domain rules
 ```
+
+## API docs
+
+`GET /docs` serves an interactive reference (Scalar) and `GET /openapi.json` the OpenAPI 3.1 document. Both are generated
+at request time by `hono-openapi` from the route validators plus the `describeRoute(...)` metadata on each route, merged
+with the four Better Auth endpoints the apps use (`/api/auth/*`). Response shapes live in `src/openapi/schemas.ts` —
+update them together with `docs/api.md` when a route changes. In production the same paths exist on the Worker URL.
 
 ## Notes
 - The Mongo client is cached per Worker isolate. If p50 latency is a problem, move it behind a Durable Object.
