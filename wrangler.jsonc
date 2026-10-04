@@ -8,7 +8,7 @@
   "observability": { "enabled": true },
   "vars": {
     "APP_NAME": "Goodtown",
-    "EMAIL_FROM": "hello@goodtown.app",
+    "EMAIL_FROM": "mailer@wanoafrica.com",
     "TERMS_VERSION": "2026-10",
     "LAUNCH_STATE": "KS",
     "DOCS_ENABLED": "0"
