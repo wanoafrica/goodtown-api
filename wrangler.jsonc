@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "goodtown-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // nodejs_compat gives the mongodb driver node:net / node:tls / node:crypto.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "APP_NAME": "Goodtown",
+    "EMAIL_FROM": "hello@goodtown.app",
+    "TERMS_VERSION": "2026-10",
+    "LAUNCH_STATE": "KS"
+  }
+  // Secrets (wrangler secret put <NAME>): MONGODB_URI, BETTER_AUTH_SECRET, SENDGRID_API_KEY
+  // Local dev: copy .dev.vars.example to .dev.vars
+}
