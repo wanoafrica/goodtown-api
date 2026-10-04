@@ -7,7 +7,7 @@ export type Env = {
   // vars
   APP_NAME: string
   EMAIL_FROM: string
-  /** Reply-to / footer address in emails. Falls back to EMAIL_FROM. */
+  /** Optional reply-to / footer address in emails; falls back to EMAIL_FROM when unset. */
   SUPPORT_EMAIL?: string
   TERMS_VERSION: string
   LAUNCH_STATE: string

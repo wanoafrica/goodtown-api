@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { otpEmail } from '../src/lib/emailTemplates'
 
-const base = { appName: 'Goodtown', otp: '482913', expiresInMinutes: 5, supportEmail: 'hello@goodtown.app' } as const
+const base = { appName: 'Goodtown', otp: '482913', expiresInMinutes: 5, supportEmail: 'support@example.test' } as const
 
 describe('otpEmail', () => {
   it('puts the code in subject, text and html', () => {
