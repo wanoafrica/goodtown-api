@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Goodtown REST API — Hono on Cloudflare Workers, MongoDB Atlas, Better Auth",
+  "description": "Goodtown REST API \u2014 Hono on Cloudflare Workers, MongoDB Atlas, Better Auth",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "seed:towns": "tsx scripts/seed-towns.ts",
     "cf-typegen": "wrangler types",
-    "format": "prettier -w src scripts test"
+    "format": "prettier -w src scripts test",
+    "email:preview": "tsx scripts/preview-email.ts"
   },
   "dependencies": {
     "@better-auth/mongo-adapter": "^1.7.7",

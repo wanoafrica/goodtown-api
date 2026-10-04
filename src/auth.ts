@@ -55,7 +55,11 @@ function buildAuth(env: Env) {
         allowedAttempts: 5,
         async sendVerificationOTP({ email, otp, type }) {
           if (type !== 'sign-in') return
-          await sendOtpEmail(env, email, otp)
+          // Both the log-in and sign-up flows send type "sign-in"; the copy differs by whether the account exists yet.
+          const existing = await getDb(env)
+            .collection('user')
+            .findOne({ email: email.toLowerCase() }, { projection: { _id: 1 } })
+          await sendOtpEmail(env, email, otp, existing ? 'login' : 'signup')
         },
       }),
       bearer(),

@@ -48,6 +48,13 @@ at request time by `hono-openapi` from the route validators plus the `describeRo
 with the four Better Auth endpoints the apps use (`/api/auth/*`). Response shapes live in `src/openapi/schemas.ts` —
 update them together with `docs/api.md` when a route changes. They are gated by `DOCS_ENABLED=1` (set in `.dev.vars`; `wrangler.jsonc` ships `"0"`, so production returns 404). To expose them on a deployed Worker, set the var to `"1"` in `wrangler.jsonc` or via `wrangler secret put DOCS_ENABLED`.
 
+## Emails
+
+OTP emails are built in code (`src/lib/emailTemplates.ts`: table layout, inline CSS, Goodtown palette, text + HTML parts)
+and sent with a plain `fetch` to SendGrid's v3 Mail Send API (`src/lib/sendgrid.ts`) — no SDK. The copy differs for
+sign-up (no account yet) and log-in; click/open tracking is disabled for these mails. `npm run email:preview` writes both
+variants to `.preview/` for a browser check. With `OTP_DEBUG_LOG=1` (local dev) codes are logged instead of sent.
+
 ## Notes
 - The Mongo client is cached per Worker isolate. If p50 latency is a problem, move it behind a Durable Object.
 - Better Auth manages `user`, `session`, `verification` collections; Goodtown data is in `profiles`, `towns`, `townRequests`, `signupDenials`.
