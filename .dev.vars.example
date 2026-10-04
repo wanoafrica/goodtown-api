@@ -5,3 +5,6 @@ BETTER_AUTH_URL=http://localhost:8787
 SENDGRID_API_KEY=SG.xxxxx
 # Set to 1 to print OTP codes to the wrangler console instead of emailing them.
 OTP_DEBUG_LOG=1
+
+# Serve /docs and /openapi.json locally (production leaves this off)
+DOCS_ENABLED=1

@@ -10,7 +10,8 @@
     "APP_NAME": "Goodtown",
     "EMAIL_FROM": "hello@goodtown.app",
     "TERMS_VERSION": "2026-10",
-    "LAUNCH_STATE": "KS"
+    "LAUNCH_STATE": "KS",
+    "DOCS_ENABLED": "0"
   }
   // Secrets (wrangler secret put <NAME>): MONGODB_URI, BETTER_AUTH_SECRET, SENDGRID_API_KEY
   // Local dev: copy .dev.vars.example to .dev.vars

@@ -1,4 +1,5 @@
 import type { Hono } from 'hono'
+import { createMiddleware } from 'hono/factory'
 import { generateSpecs } from 'hono-openapi'
 import { Scalar } from '@scalar/hono-api-reference'
 import type { Env } from '../env'
@@ -13,6 +14,14 @@ const AUTH_PATHS = ['/email-otp/send-verification-otp', '/sign-in/email-otp', '/
  * and `GET /docs` (Scalar API reference UI).
  */
 export function mountDocs(app: Hono<{ Bindings: Env }>) {
+  // Gate: both endpoints 404 unless DOCS_ENABLED=1 (set in .dev.vars; off in production).
+  const gate = createMiddleware<{ Bindings: Env }>(async (c, next) => {
+    if (c.env.DOCS_ENABLED !== '1') return c.json({ ok: false, code: 'not_found' }, 404)
+    await next()
+  })
+  app.use('/docs', gate)
+  app.use('/openapi.json', gate)
+
   app.get('/openapi.json', async (c) => {
     const spec = await generateSpecs(
       app,

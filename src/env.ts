@@ -11,4 +11,6 @@ export type Env = {
   LAUNCH_STATE: string
   BETTER_AUTH_URL?: string
   OTP_DEBUG_LOG?: string
+  /** '1' serves /docs and /openapi.json; anything else → 404. Off in wrangler.jsonc, on in .dev.vars. */
+  DOCS_ENABLED?: string
 }

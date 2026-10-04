@@ -46,7 +46,7 @@ test/               vitest unit tests for the domain rules
 `GET /docs` serves an interactive reference (Scalar) and `GET /openapi.json` the OpenAPI 3.1 document. Both are generated
 at request time by `hono-openapi` from the route validators plus the `describeRoute(...)` metadata on each route, merged
 with the four Better Auth endpoints the apps use (`/api/auth/*`). Response shapes live in `src/openapi/schemas.ts` —
-update them together with `docs/api.md` when a route changes. In production the same paths exist on the Worker URL.
+update them together with `docs/api.md` when a route changes. They are gated by `DOCS_ENABLED=1` (set in `.dev.vars`; `wrangler.jsonc` ships `"0"`, so production returns 404). To expose them on a deployed Worker, set the var to `"1"` in `wrangler.jsonc` or via `wrangler secret put DOCS_ENABLED`.
 
 ## Notes
 - The Mongo client is cached per Worker isolate. If p50 latency is a problem, move it behind a Durable Object.
