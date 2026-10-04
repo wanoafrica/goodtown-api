@@ -13,7 +13,7 @@ npm run dev                           # http://localhost:8787
 ```
 `OTP_DEBUG_LOG=1` in `.dev.vars` prints codes to the console instead of emailing.
 
-Atlas: Network Access must allow `0.0.0.0/0` (Workers have no fixed IPs); use a dedicated DB user with readWrite on the `goodtown` database only.
+Atlas: Network Access must allow `0.0.0.0/0` (Workers have no fixed IPs); use a dedicated DB user with readWrite on the `goodtown` database only. The API and the seed script always use the `goodtown` database (hard-coded in `src/db/client.ts`), regardless of any database name in `MONGODB_URI` — there is no separate test/dev database.
 
 ## Deploy
 ```bash

@@ -5,6 +5,7 @@
 import { MongoClient } from 'mongodb'
 import { loadDevVars } from './load-dev-vars'
 import { collections, ensureIndexes, type Town } from '../src/db/collections'
+import { DB_NAME } from '../src/db/client'
 
 const towns: Town[] = [
   {
@@ -33,7 +34,7 @@ async function main() {
   if (!uri) throw new Error('MONGODB_URI is required — set it in .dev.vars or the environment')
   const client = new MongoClient(uri)
   await client.connect()
-  const db = client.db()
+  const db = client.db(DB_NAME)
   await ensureIndexes(db)
   const { towns: col } = collections(db)
   for (const t of towns) {

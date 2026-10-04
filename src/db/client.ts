@@ -22,6 +22,9 @@ export function getMongo(env: Env): MongoClient {
   return client
 }
 
+/** Single database for every environment (seed, dev, production): `goodtown`. */
+export const DB_NAME = 'goodtown'
+
 export function getDb(env: Env): Db {
-  return getMongo(env).db() // database name comes from the URI path
+  return getMongo(env).db(DB_NAME)
 }
