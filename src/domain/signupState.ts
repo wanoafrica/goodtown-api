@@ -12,11 +12,7 @@ export type SignupState =
   | { state: 'terms'; termsVersion: string }
   | { state: 'active'; homeTownGeoid: string | null }
 
-export function signupState(
-  profile: Profile | null,
-  denied: boolean,
-  currentTermsVersion: string,
-): SignupState {
+export function signupState(profile: Profile | null, denied: boolean, currentTermsVersion: string): SignupState {
   if (denied) return { state: 'under_18' }
   if (!profile || !profile.name || !profile.birthdate) return { state: 'needs_profile' }
   if (profile.suspended) return { state: 'suspended' }

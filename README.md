@@ -55,6 +55,14 @@ and sent with a plain `fetch` to SendGrid's v3 Mail Send API (`src/lib/sendgrid.
 sign-up (no account yet) and log-in; click/open tracking is disabled for these mails. `npm run email:preview` writes both
 variants to `.preview/` for a browser check. With `OTP_DEBUG_LOG=1` (local dev) codes are logged instead of sent.
 
+## MongoDB connections on Workers
+
+One `MongoClient` **per request** (`src/db/client.ts`, `withDb`): a socket belongs to the request that opened it, and a
+client cached across requests fails on the next request with an uncaught error (Cloudflare 1101, roughly every other
+call — observed in production on 2026-10-04). The client is exposed through `AsyncLocalStorage` (`getDb()`, and the
+`requestDb` proxy handed to Better Auth) and closed after the response via `ctx.waitUntil`. Cost ≈ one TLS + auth
+handshake per request; if that matters, move the client into a Durable Object and query it over RPC.
+
 ## Notes
 - The Mongo client is cached per Worker isolate. If p50 latency is a problem, move it behind a Durable Object.
 - Better Auth manages `user`, `session`, `verification` collections; Goodtown data is in `profiles`, `towns`, `townRequests`, `signupDenials`.

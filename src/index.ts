@@ -3,6 +3,7 @@ import { logger } from 'hono/logger'
 import { secureHeaders } from 'hono/secure-headers'
 import type { Env } from './env'
 import { createAuth } from './auth'
+import { withDb } from './db/client'
 import { errorResponse } from './lib/errors'
 import { authRoutes } from './routes/auth'
 import { signupRoutes } from './routes/signup'
@@ -32,4 +33,9 @@ app.route('/v1/me', meRoutes)
 // OpenAPI document + Scalar reference UI (mount after the routes so they are all in the document).
 mountDocs(app)
 
-export default app
+// Every request gets its own MongoDB client (see db/client.ts); it is closed after the response.
+export default {
+  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    return withDb(env, ctx, async () => app.fetch(request, env, ctx))
+  },
+} satisfies ExportedHandler<Env>

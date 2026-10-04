@@ -68,7 +68,7 @@ signupRoutes.post(
   async (c) => {
     const user = c.get('user')
     const { name: rawName, birthdate: rawDate } = c.req.valid('json')
-    const db = getDb(c.env)
+    const db = getDb()
     const { profiles, signupDenials } = collections(db)
 
     const hash = await identifierHash(user.email)

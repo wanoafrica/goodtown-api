@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth'
 import { bearer, emailOTP, openAPI } from 'better-auth/plugins'
 import { mongodbAdapter } from '@better-auth/mongo-adapter'
 import type { Env } from './env'
-import { getDb, getMongo } from './db/client'
+import { getDb, requestDb } from './db/client'
 import { sendOtpEmail } from './lib/sendgrid'
 
 let cached: { key: string; auth: ReturnType<typeof buildAuth> } | undefined
@@ -33,7 +33,7 @@ function buildAuth(env: Env) {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     basePath: '/api/auth',
-    database: mongodbAdapter(getDb(env), { client: getMongo(env) }),
+    database: mongodbAdapter(requestDb),
     emailAndPassword: { enabled: false },
     session: {
       expiresIn: 60 * 60 * 24 * 90, // 90 days — phones stay signed in
@@ -56,7 +56,7 @@ function buildAuth(env: Env) {
         async sendVerificationOTP({ email, otp, type }) {
           if (type !== 'sign-in') return
           // Both the log-in and sign-up flows send type "sign-in"; the copy differs by whether the account exists yet.
-          const existing = await getDb(env)
+          const existing = await getDb()
             .collection('user')
             .findOne({ email: email.toLowerCase() }, { projection: { _id: 1 } })
           await sendOtpEmail(env, email, otp, existing ? 'login' : 'signup')

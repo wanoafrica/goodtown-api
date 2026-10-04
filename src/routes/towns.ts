@@ -74,7 +74,7 @@ townRoutes.get(
     const inArea = lat >= KANSAS.minLat && lat <= KANSAS.maxLat && lng >= KANSAS.minLng && lng <= KANSAS.maxLng
     if (!inArea) return c.json({ ok: true, resolution: 'outside_launch_area' as const })
 
-    const { towns } = collections(getDb(c.env))
+    const { towns } = collections(getDb())
     const town = await towns.findOne({
       location: {
         $near: {
@@ -115,7 +115,7 @@ townRoutes.get(
   validator('query', z.object({ q: z.string().trim().min(1).max(40) }), validationHook),
   async (c) => {
     const { q } = c.req.valid('query')
-    const { towns } = collections(getDb(c.env))
+    const { towns } = collections(getDb())
     const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const list = await towns
       .find({
@@ -154,7 +154,7 @@ townRoutes.get(
   }),
   requireSession,
   async (c) => {
-    const { towns } = collections(getDb(c.env))
+    const { towns } = collections(getDb())
     const town = await towns.findOne({ geoid: c.req.param('geoid') }, { projection: { neighborhoods: 1 } })
     if (!town) throw new ApiError(404, 'not_found')
     return c.json({ ok: true, neighborhoods: town.neighborhoods })
@@ -189,7 +189,7 @@ townRoutes.get(
   async (c) => {
     const user = c.get('user')
     const geoid = c.req.param('geoid')
-    const { towns, townRequests } = collections(getDb(c.env))
+    const { towns, townRequests } = collections(getDb())
     const town = await towns.findOne({ geoid })
     if (!town) throw new ApiError(404, 'not_found')
     const [wantCount, mine, nearestLive] = await Promise.all([
@@ -240,7 +240,7 @@ townRoutes.post(
   async (c) => {
     const user = c.get('user')
     const geoid = c.req.param('geoid')
-    const { towns, townRequests } = collections(getDb(c.env))
+    const { towns, townRequests } = collections(getDb())
     if (!(await towns.findOne({ geoid }, { projection: { _id: 1 } }))) throw new ApiError(404, 'not_found')
     await townRequests.updateOne(
       { geoid, userId: user.id },

@@ -71,7 +71,7 @@ authRoutes.get(
   requireSession,
   async (c) => {
     const user = c.get('user')
-    const db = getDb(c.env)
+    const db = getDb()
     const { profiles, signupDenials } = collections(db)
     const [profile, denial] = await Promise.all([
       profiles.findOne({ userId: user.id }),

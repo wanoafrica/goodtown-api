@@ -55,7 +55,7 @@ meRoutes.put(
   async (c) => {
     const user = c.get('user')
     const { geoid, neighborhoodId = null } = c.req.valid('json')
-    const { profiles, towns } = collections(getDb(c.env))
+    const { profiles, towns } = collections(getDb())
     if (geoid) {
       const town = await towns.findOne({ geoid })
       if (!town) throw new ApiError(404, 'not_found', 'Unknown town')
@@ -113,7 +113,7 @@ meRoutes.post(
         current: c.env.TERMS_VERSION,
       })
     }
-    const { profiles } = collections(getDb(c.env))
+    const { profiles } = collections(getDb())
     const res = await profiles.updateOne(
       { userId: user.id },
       {
@@ -159,7 +159,7 @@ meRoutes.post(
   async (c) => {
     const user = c.get('user')
     const { token, platform } = c.req.valid('json')
-    const { profiles } = collections(getDb(c.env))
+    const { profiles } = collections(getDb())
     await profiles.updateOne({ userId: user.id }, { $pull: { pushTokens: { token } } })
     await profiles.updateOne(
       { userId: user.id },
@@ -193,7 +193,7 @@ meRoutes.delete(
   async (c) => {
     const user = c.get('user')
     const { token } = c.req.valid('json')
-    const { profiles } = collections(getDb(c.env))
+    const { profiles } = collections(getDb())
     await profiles.updateOne({ userId: user.id }, { $pull: { pushTokens: { token } }, $set: { updatedAt: new Date() } })
     return c.json({ ok: true })
   },

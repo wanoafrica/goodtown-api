@@ -33,4 +33,3 @@ export const errorResponse: ErrorHandler = (err, c) => {
   console.error(err)
   return c.json({ ok: false, code: 'internal', message: 'Something went wrong' }, 500)
 }
-
