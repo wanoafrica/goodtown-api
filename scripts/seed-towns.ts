@@ -1,8 +1,9 @@
 /**
  * Seeds the Kansas launch-area towns and creates indexes.
- * Run: MONGODB_URI=... npm run seed:towns   (idempotent — upserts by geoid)
+ * Run: npm run seed:towns   (reads MONGODB_URI from .dev.vars or the environment; idempotent — upserts by geoid)
  */
 import { MongoClient } from 'mongodb'
+import { loadDevVars } from './load-dev-vars'
 import { collections, ensureIndexes, type Town } from '../src/db/collections'
 
 const towns: Town[] = [
@@ -27,8 +28,9 @@ const towns: Town[] = [
 ]
 
 async function main() {
+  loadDevVars()
   const uri = process.env.MONGODB_URI
-  if (!uri) throw new Error('MONGODB_URI is required')
+  if (!uri) throw new Error('MONGODB_URI is required — set it in .dev.vars or the environment')
   const client = new MongoClient(uri)
   await client.connect()
   const db = client.db()

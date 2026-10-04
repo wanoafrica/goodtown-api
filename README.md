@@ -8,7 +8,7 @@ Contract: [`docs/api.md`](docs/api.md). The Android app's repository interfaces 
 ```bash
 npm install
 cp .dev.vars.example .dev.vars        # fill MONGODB_URI, BETTER_AUTH_SECRET, SENDGRID_API_KEY
-MONGODB_URI='...' npm run seed:towns  # Kansas towns + indexes (idempotent)
+npm run seed:towns                    # Kansas towns + indexes (idempotent; reads .dev.vars)
 npm run dev                           # http://localhost:8787
 ```
 `OTP_DEBUG_LOG=1` in `.dev.vars` prints codes to the console instead of emailing.
