@@ -83,7 +83,7 @@ export function otpEmail(input: OtpEmailInput): { subject: string; text: string;
 <meta name="x-apple-disable-message-reformatting">
 <meta name="color-scheme" content="light">
 <meta name="supported-color-schemes" content="light">
-<title>${subject}</title>
+<title>${escapeHtml(subject)}</title>
 <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
 <style>
   :root { color-scheme: light; supported-color-schemes: light; }

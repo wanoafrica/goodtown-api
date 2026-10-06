@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth'
 import { bearer, emailOTP, openAPI } from 'better-auth/plugins'
 import { mongodbAdapter } from '@better-auth/mongo-adapter'
 import type { Env } from './env'
-import { getDb, requestDb } from './db/client'
+import { getDb, getMongo } from './db/client'
 import { sendOtpEmail } from './lib/sendgrid'
 
 let cached: { key: string; auth: ReturnType<typeof buildAuth> } | undefined
@@ -33,12 +33,14 @@ function buildAuth(env: Env) {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     basePath: '/api/auth',
-    database: mongodbAdapter(requestDb),
+    database: mongodbAdapter(getDb(), { client: getMongo() }),
     emailAndPassword: { enabled: false },
     session: {
       expiresIn: 60 * 60 * 24 * 90, // 90 days — phones stay signed in
       updateAge: 60 * 60 * 24, // refresh the expiry at most once a day
     },
+    // Behind a reverse proxy the client IP arrives in a header; Better Auth rate-limits per IP.
+    advanced: { ipAddress: { ipAddressHeaders: env.TRUSTED_IP_HEADERS.split(',').map((h) => h.trim()) } },
     rateLimit: {
       enabled: true,
       window: 60,

@@ -1,30 +1,37 @@
 # goodtown-api
 
-Goodtown's REST API: **Hono** on **Cloudflare Workers**, **MongoDB Atlas** (official driver via `nodejs_compat`), **Better Auth** for email-OTP sign-in and bearer sessions, **SendGrid** for the code emails.
+Goodtown's REST API: **Hono** on **Node 22** (Docker), **MongoDB Atlas** (official driver), **Better Auth** for email-OTP sign-in and bearer sessions, **SendGrid** for the code emails.
 
 Contract: [`docs/api.md`](docs/api.md). The Android app's repository interfaces map 1:1 onto it.
 
 ## Setup
+
 ```bash
 npm install
-cp .dev.vars.example .dev.vars        # fill MONGODB_URI, BETTER_AUTH_SECRET, SENDGRID_API_KEY
-npm run seed:towns                    # Kansas towns + indexes (idempotent; reads .dev.vars)
-npm run dev                           # http://localhost:8787
-#   http://localhost:8787/docs          interactive API reference (Scalar)
-#   http://localhost:8787/openapi.json  OpenAPI 3.1 document (generated from the Zod validators)
+cp .env.example .env                  # fill in MONGODB_URI, BETTER_AUTH_SECRET (openssl rand -base64 32), SENDGRID_API_KEY
+npm run seed:towns                    # 11 Kansas towns + indexes into the `goodtown` database (idempotent)
+npm run dev                           # http://localhost:8080 (tsx watch)
+#   http://localhost:8080/docs          interactive API reference (Scalar) — DOCS_ENABLED=1
+#   http://localhost:8080/openapi.json  OpenAPI 3.1 document
 ```
-`OTP_DEBUG_LOG=1` in `.dev.vars` prints codes to the console instead of emailing.
 
-Atlas: Network Access must allow `0.0.0.0/0` (Workers have no fixed IPs); use a dedicated DB user with readWrite on the `goodtown` database only. The API and the seed script always use the `goodtown` database (hard-coded in `src/db/client.ts`), regardless of any database name in `MONGODB_URI` — there is no separate test/dev database.
+Node 22+ (uses `process.loadEnvFile`). Codes are logged instead of emailed while `OTP_DEBUG_LOG=1`.
 
 ## Deploy
-```bash
-wrangler secret put MONGODB_URI
-wrangler secret put BETTER_AUTH_SECRET     # openssl rand -base64 32
-wrangler secret put SENDGRID_API_KEY
-wrangler secret put BETTER_AUTH_URL        # https://api.goodtown.app
-npm run deploy
-```
+
+The API is a Docker image (`Dockerfile`: Node 22 alpine, non-root, `/health` healthcheck, port 8080).
+
+**DigitalOcean App Platform** (recommended): Create App → GitHub → `wanoafrica/goodtown-api` → it detects the Dockerfile.
+Set the secrets `MONGODB_URI`, `BETTER_AUTH_SECRET`, `SENDGRID_API_KEY` as encrypted env vars and `BETTER_AUTH_URL` to the
+app's public URL (`${APP_URL}` works in the spec). `.do/app.yaml` has the full spec. Deploys on every push to `main`.
+Atlas Network Access must allow the app's egress IPs (or `0.0.0.0/0`).
+
+**Anywhere else**: `docker build -t goodtown-api . && docker run --env-file .env -p 8080:8080 goodtown-api`, behind any
+TLS-terminating proxy (Caddy, nginx, the platform's). The proxy must pass the client IP in `X-Forwarded-For`
+(`TRUSTED_IP_HEADERS`) — Better Auth rate-limits OTP sends per IP.
+
+History: the API ran on Cloudflare Workers until 2026-10-06. It moved to a Node host because the MongoDB driver needs a
+long-lived connection pool, which Workers cannot keep across requests (see git history for the per-request workaround).
 
 ## Layout
 ```
@@ -46,7 +53,7 @@ test/               vitest unit tests for the domain rules
 `GET /docs` serves an interactive reference (Scalar) and `GET /openapi.json` the OpenAPI 3.1 document. Both are generated
 at request time by `hono-openapi` from the route validators plus the `describeRoute(...)` metadata on each route, merged
 with the four Better Auth endpoints the apps use (`/api/auth/*`). Response shapes live in `src/openapi/schemas.ts` —
-update them together with `docs/api.md` when a route changes. They are gated by `DOCS_ENABLED=1` (set in `.dev.vars`; `wrangler.jsonc` ships `"0"`, so production returns 404). To expose them on a deployed Worker, set the var to `"1"` in `wrangler.jsonc` or via `wrangler secret put DOCS_ENABLED`.
+update them together with `docs/api.md` when a route changes. They are gated by `DOCS_ENABLED=1` (on in `.env.example`; leave it unset or `0` in production for a 404).
 
 ## Emails
 
@@ -55,13 +62,10 @@ and sent with a plain `fetch` to SendGrid's v3 Mail Send API (`src/lib/sendgrid.
 sign-up (no account yet) and log-in; click/open tracking is disabled for these mails. `npm run email:preview` writes both
 variants to `.preview/` for a browser check. With `OTP_DEBUG_LOG=1` (local dev) codes are logged instead of sent.
 
-## MongoDB connections on Workers
+## MongoDB connections
 
-One `MongoClient` **per request** (`src/db/client.ts`, `withDb`): a socket belongs to the request that opened it, and a
-client cached across requests fails on the next request with an uncaught error (Cloudflare 1101, roughly every other
-call — observed in production on 2026-10-04). The client is exposed through `AsyncLocalStorage` (`getDb()`, and the
-`requestDb` proxy handed to Better Auth) and closed after the response via `ctx.waitUntil`. Cost ≈ one TLS + auth
-handshake per request; if that matters, move the client into a Durable Object and query it over RPC.
+One `MongoClient` per process (`src/db/client.ts`), connected at start-up (`src/server.ts` pings the database and ensures
+indexes before listening). Pool 2–20. The process exits non-zero if the database is unreachable, so the platform restarts it.
 
 ## Notes
 - The Mongo client is cached per Worker isolate. If p50 latency is a problem, move it behind a Durable Object.

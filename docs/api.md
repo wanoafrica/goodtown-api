@@ -1,6 +1,6 @@
 # Goodtown API — contract v1
 
-Base URL: `https://api.goodtown.app` (prod) · `http://localhost:8787` (wrangler dev).
+Base URL: `https://api.goodtown.app` (prod, once DNS is set; until then the App Platform URL) · `http://localhost:8080` (`npm run dev`).
 Interactive reference: `<base>/docs` · machine-readable: `<base>/openapi.json` (generated from the code; this file is the human-written contract and the Android mapping).
 All responses are JSON. Success: `{ ok: true, ... }`. Failure: `{ ok: false, code, message?, details? }` — **clients switch on `code`**.
 

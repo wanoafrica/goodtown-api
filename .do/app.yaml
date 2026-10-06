@@ -1,0 +1,26 @@
+# DigitalOcean App Platform spec (optional — the dashboard "Import from GitHub" flow produces the same thing).
+# doctl apps create --spec .do/app.yaml
+name: goodtown-api
+region: nyc
+services:
+  - name: api
+    dockerfile_path: Dockerfile
+    source_dir: /
+    github:
+      repo: wanoafrica/goodtown-api
+      branch: main
+      deploy_on_push: true
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    health_check:
+      http_path: /health
+    envs:
+      - key: BETTER_AUTH_URL
+        value: ${APP_URL}
+      - key: TRUSTED_IP_HEADERS
+        value: x-forwarded-for
+      - key: DOCS_ENABLED
+        value: "0"
+      # Set these as encrypted secrets in the dashboard (Settings → api → Environment Variables):
+      # MONGODB_URI, BETTER_AUTH_SECRET, SENDGRID_API_KEY
