@@ -21,7 +21,7 @@ meRoutes.put(
     tags: ['Me'],
     summary: 'Set home town (or browse mode)',
     description:
-      'AuthTown. `geoid: null` = browse mode ("Look around Wichita"). Town must be live; neighborhood must belong to it.',
+      'AuthTown. `geoid: null` (or omitted) = browse mode ("Look around Wichita"). Town must be live; neighborhood must belong to it.',
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -49,7 +49,8 @@ meRoutes.put(
   validator(
     'json',
     z.object({
-      geoid: z.string().nullable(),
+      // Clients that omit null fields (kotlinx explicitNulls=false) send `{}` for browse mode.
+      geoid: z.string().nullable().default(null),
       neighborhoodId: z.string().nullable().optional(),
     }),
     validationHook,

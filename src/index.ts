@@ -9,6 +9,7 @@ import { signupRoutes } from './routes/signup'
 import { townRoutes } from './routes/towns'
 import { meRoutes } from './routes/me'
 import { mountDocs } from './openapi/docs'
+import { evictSessionFrom } from './middleware/session'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -20,7 +21,11 @@ app.notFound((c) => c.json({ ok: false, code: 'not_found' }, 404))
 app.get('/', (c) => c.json({ ok: true, name: c.env.APP_NAME, service: 'goodtown-api' }))
 app.get('/health', (c) => c.json({ ok: true }))
 
-// Better Auth: OTP send/verify, session, sign-out.
+// Better Auth: OTP send/verify, session, sign-out. Sign-out also drops the cached session.
+app.post('/api/auth/sign-out', async (c, next) => {
+  evictSessionFrom(c.req.raw.headers)
+  await next()
+})
 app.on(['GET', 'POST'], '/api/auth/*', (c) => createAuth(c.env).handler(c.req.raw))
 
 // Goodtown domain.

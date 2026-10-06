@@ -57,7 +57,8 @@ neighborhood ids look like `wichita_city:DELANO`.
 ## Rules enforced server-side
 - Adults only: `complete_signup` with age < 18 → `under_18`, and a SHA-256 of the email goes on the denial list permanently (admin clears via `clearedAt`).
 - Birthday immutable after `complete_signup`.
-- Home town must be a **live** town; `null` = browse mode. Either sets `townStepDone`.
+- Home town must be a **live** town; `null` or an omitted `geoid` = browse mode. Either sets `townStepDone`.
+- Sessions resolved from a bearer token are cached in the API process for 30 s (sign-out evicts immediately), so a burst of calls from one screen does one session lookup.
 - `terms.version` must equal the server's `TERMS_VERSION` or the call is rejected with the current version in `details`.
 - Launch areas = `launch_areas` (Wichita centre, 25 mi). `resolve` is **live** when the *point* is inside one; the town comes from Census boundaries (county → smallest containing place), rural points snap to the nearest town centre within 40 km, and anything outside every Kansas county is `outside_launch_area`.
 - `search` returns up to 10 Kansas towns by name prefix: live first, then cities before communities, A–Z.
