@@ -34,7 +34,8 @@ const server = serve(
     // Hono's `c.env` is whatever we pass as the second argument.
     fetch: (request, bindings) => app.fetch(withClientIp(request, bindings as HttpBindings), env),
     port: env.PORT,
-    hostname: '0.0.0.0',
+    // No hostname → Node listens dual-stack (IPv4 + IPv6), so both 127.0.0.1 and ::1 work
+    // (adb reverse / proxies may use either).
   },
   (info) => console.log(`goodtown-api listening on http://${info.address}:${info.port}`),
 )
