@@ -24,11 +24,12 @@ export const errorSchema = z.object({
 })
 
 export const townSchema = z.object({
-  geoid: z.string(),
+  geoid: z.string().describe('Census place GEOID, e.g. Wichita 2079000'),
   name: z.string(),
+  kind: z.enum(['city', 'community']).describe('city = incorporated place; community = census-designated place'),
   state: z.string(),
-  county: z.string(),
-  isLive: z.boolean(),
+  county: z.string().describe('Display form, e.g. "Sedgwick County"'),
+  isLive: z.boolean().describe('Inside a launch area (Wichita, 25 mi)'),
 })
 
 export const neighborhoodSchema = z.object({
@@ -60,6 +61,9 @@ export const resolveResponse = z.union([
     ok: z.literal(true),
     resolution: z.enum(['live', 'not_live']),
     town: townSchema,
+    neighborhood: neighborhoodSchema
+      .nullable()
+      .describe('The neighborhood the point falls in, when the town has a layer'),
   }),
   z.object({
     ok: z.literal(true),

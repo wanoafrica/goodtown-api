@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import app from './index'
 import { closeMongo, connectMongo, getDb } from './db/client'
 import { ensureIndexes } from './db/collections'
+import { ensureGeoIndexes } from './geo/model'
 import { loadEnv } from './env'
 
 // Local development: read `.env` if present (production injects real environment variables).
@@ -13,7 +14,7 @@ connectMongo(env)
 
 // Fail fast if the database is unreachable, and make sure the indexes exist.
 await getDb().command({ ping: 1 })
-await ensureIndexes(getDb())
+await Promise.all([ensureIndexes(getDb()), ensureGeoIndexes(getDb())])
 
 /**
  * Behind a reverse proxy the client IP arrives in X-Forwarded-For (what Better Auth's rate limiter

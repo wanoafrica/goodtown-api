@@ -4,6 +4,8 @@ import { z } from 'zod'
 import type { Env } from '../env'
 import { getDb } from '../db/client'
 import { collections } from '../db/collections'
+import { isLiveTown, launchTowns } from '../geo/live'
+import { geo } from '../geo/model'
 import { ApiError } from '../lib/errors'
 import { requireSession, type AppVariables } from '../middleware/session'
 import { validationHook } from '../lib/validate'
@@ -55,12 +57,21 @@ meRoutes.put(
   async (c) => {
     const user = c.get('user')
     const { geoid, neighborhoodId = null } = c.req.valid('json')
-    const { profiles, towns } = collections(getDb())
+    const db = getDb()
+    const { profiles } = collections(db)
     if (geoid) {
-      const town = await towns.findOne({ geoid })
+      const g = geo(db)
+      const town = await g.towns.findOne({ geoid }, { projection: { geometry: 0 } })
       if (!town) throw new ApiError(404, 'not_found', 'Unknown town')
-      if (!town.isLive) throw new ApiError(422, 'validation', 'Goodtown is not open in this town yet')
-      if (neighborhoodId && !town.neighborhoods.some((n) => n.id === neighborhoodId)) {
+      if (!isLiveTown(town, await launchTowns(db)))
+        throw new ApiError(422, 'validation', 'Goodtown is not open in this town yet')
+      if (
+        neighborhoodId &&
+        !(await g.neighborhoods.findOne(
+          { id: neighborhoodId, townGeoid: geoid, active: true },
+          { projection: { _id: 1 } },
+        ))
+      ) {
         throw new ApiError(422, 'validation', 'Unknown neighborhood')
       }
     }

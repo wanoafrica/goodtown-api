@@ -31,7 +31,7 @@ Auth: Bearer token in `Authorization: Bearer <token>`. The token is issued by Be
 | `AuthRepository.acceptTerms(version)` | `POST /v1/me/terms {version}` |
 | `AuthRepository.registerPushToken(token)` | `POST /v1/me/push-token {token, platform:"android"}` |
 | `AuthRepository.signOut()` | `DELETE /v1/me/push-token {token}` then `POST /api/auth/sign-out` |
-| `TownRepository.resolve(lat,lng)` | `GET /v1/towns/resolve?lat&lng` → `{resolution: live \| not_live \| outside_launch_area, town?}` |
+| `TownRepository.resolve(lat,lng)` | `GET /v1/towns/resolve?lat&lng` → `{resolution: live \| not_live \| outside_launch_area, town?, neighborhood?}` |
 | `TownRepository.searchTowns(q)` | `GET /v1/towns/search?q=` → `{towns:[...]}` |
 | `TownRepository.neighborhoods(geoid)` | `GET /v1/towns/:geoid/neighborhoods` |
 | `TownRepository.interest(geoid)` | `GET /v1/towns/:geoid/interest` → `{wantCount, alreadyRequested, nearestLive, nearestLiveMiles}` |
@@ -40,8 +40,13 @@ Auth: Bearer token in `Authorization: Bearer <token>`. The token is issued by Be
 
 ## Town object
 ```json
-{ "geoid": "ks-wichita", "name": "Wichita", "state": "KS", "county": "Sedgwick County", "isLive": true }
+{ "geoid": "2079000", "name": "Wichita", "kind": "city", "state": "KS", "county": "Sedgwick County", "isLive": true }
 ```
+`geoid` is the **US Census place GEOID** (7 digits; Wichita `2079000`, Derby `2017800`, Hutchinson `2033625`) — stable,
+shared with every public dataset, and what `homeTownGeoid` / town requests store. `kind` is `city` (incorporated) or
+`community` (census-designated place). `isLive` = the town's centre is inside a launch area. `resolve` also returns
+`neighborhood: { id, name } | null` — the neighborhood the point is in, when the town has a layer (Wichita only today);
+neighborhood ids look like `wichita_city:DELANO`.
 
 ## Better Auth endpoints used (under `/api/auth`)
 - `POST /email-otp/send-verification-otp` `{ email, type: "sign-in" }` — 3/min per IP
@@ -54,4 +59,5 @@ Auth: Bearer token in `Authorization: Bearer <token>`. The token is issued by Be
 - Birthday immutable after `complete_signup`.
 - Home town must be a **live** town; `null` = browse mode. Either sets `townStepDone`.
 - `terms.version` must equal the server's `TERMS_VERSION` or the call is rejected with the current version in `details`.
-- Launch area = Kansas bounding box; `resolve` finds the nearest seeded town within 40 km.
+- Launch areas = `launch_areas` (Wichita centre, 25 mi). `resolve` is **live** when the *point* is inside one; the town comes from Census boundaries (county → smallest containing place), rural points snap to the nearest town centre within 40 km, and anything outside every Kansas county is `outside_launch_area`.
+- `search` returns up to 10 Kansas towns by name prefix: live first, then cities before communities, A–Z.

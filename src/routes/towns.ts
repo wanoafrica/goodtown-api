@@ -3,7 +3,11 @@ import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import type { Env } from '../env'
 import { getDb } from '../db/client'
-import { collections, type Town } from '../db/collections'
+import { collections } from '../db/collections'
+import { geo, type GeoTown } from '../geo/model'
+import { isLivePoint, isLiveTown, launchTowns, nearestLaunch, type LaunchTown } from '../geo/live'
+import { locatePoint } from '../geo/locate'
+import { escapeRegex } from '../geo/names'
 import { ApiError } from '../lib/errors'
 import { requireSession, type AppVariables } from '../middleware/session'
 import { validationHook } from '../lib/validate'
@@ -21,20 +25,19 @@ export const townRoutes = new Hono<{
   Variables: AppVariables
 }>()
 
-const publicTown = (t: Town) => ({
-  geoid: t.geoid,
-  name: t.name,
-  state: t.state,
-  county: t.county,
-  isLive: t.isLive,
-})
-
-/** Kansas bounding box — the launch area. Anything outside → "outside launch area". */
-const KANSAS = {
-  minLat: 36.993,
-  maxLat: 40.003,
-  minLng: -102.052,
-  maxLng: -94.588,
+/**
+ * The Town object the app sees. `geoid` is the Census place GEOID (Wichita 2079000); `county` is
+ * the display form ("Sedgwick County"); `isLive` comes from the launch areas, not a stored flag.
+ */
+export function publicTown(t: GeoTown, launch: LaunchTown[], state: string) {
+  return {
+    geoid: t.geoid,
+    name: t.name,
+    kind: t.kind,
+    state,
+    county: t.countyName ? `${t.countyName} County` : '',
+    isLive: isLiveTown(t, launch),
+  }
 }
 
 /**
@@ -45,9 +48,11 @@ townRoutes.get(
   '/resolve',
   describeRoute({
     tags: ['Towns'],
-    summary: 'Resolve the nearest town for a location',
+    summary: 'Resolve the town for a location',
     description:
-      'AuthLocation. Kansas bounding box first, then nearest town within 40 km. `live` → AuthTown, `not_live` → NotHereYet, `outside_launch_area` → AuthTownPick.',
+      'AuthLocation. County → place by Census boundaries; rural points snap to the nearest town centre within 40 km. ' +
+      '`live` when the point is inside a launch area (Wichita, 25 mi) → AuthTown; `not_live` → NotHereYet; ' +
+      'outside Kansas / no town nearby → `outside_launch_area` → AuthTownPick.',
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -71,23 +76,15 @@ townRoutes.get(
   ),
   async (c) => {
     const { lat, lng } = c.req.valid('query')
-    const inArea = lat >= KANSAS.minLat && lat <= KANSAS.maxLat && lng >= KANSAS.minLng && lng <= KANSAS.maxLng
-    if (!inArea) return c.json({ ok: true, resolution: 'outside_launch_area' as const })
-
-    const { towns } = collections(getDb())
-    const town = await towns.findOne({
-      location: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [lng, lat] },
-          $maxDistance: 40_000,
-        },
-      },
-    })
-    if (!town) return c.json({ ok: true, resolution: 'outside_launch_area' as const })
+    const db = getDb()
+    const [located, launch] = await Promise.all([locatePoint(db, lng, lat), launchTowns(db)])
+    if (!located.county || !located.town) return c.json({ ok: true, resolution: 'outside_launch_area' as const })
+    const live = isLivePoint({ type: 'Point', coordinates: [lng, lat] }, launch)
     return c.json({
       ok: true,
-      resolution: town.isLive ? ('live' as const) : ('not_live' as const),
-      town: publicTown(town),
+      resolution: live ? ('live' as const) : ('not_live' as const),
+      town: publicTown(located.town, launch, c.env.LAUNCH_STATE),
+      neighborhood: located.neighborhood ? { id: located.neighborhood.id, name: located.neighborhood.name } : null,
     })
   },
 )
@@ -98,7 +95,8 @@ townRoutes.get(
   describeRoute({
     tags: ['Towns'],
     summary: 'Search towns by name prefix',
-    description: 'AuthTownPick. Launch state only; live towns first; max 10.',
+    description:
+      'AuthTownPick. Kansas cities and communities; live first, then cities before unincorporated communities; max 10.',
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -115,17 +113,26 @@ townRoutes.get(
   validator('query', z.object({ q: z.string().trim().min(1).max(40) }), validationHook),
   async (c) => {
     const { q } = c.req.valid('query')
-    const { towns } = collections(getDb())
-    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const list = await towns
-      .find({
-        state: c.env.LAUNCH_STATE,
-        name: { $regex: `^${escaped}`, $options: 'i' },
-      })
-      .sort({ isLive: -1, name: 1 })
-      .limit(10)
-      .toArray()
-    return c.json({ ok: true, towns: list.map(publicTown) })
+    const db = getDb()
+    const [list, launch] = await Promise.all([
+      geo(db)
+        .towns.find({ name: { $regex: `^${escapeRegex(q)}`, $options: 'i' } }, { projection: { geometry: 0 } })
+        .collation({ locale: 'en', strength: 2 })
+        .sort({ name: 1 })
+        .limit(40)
+        .toArray(),
+      launchTowns(db),
+    ])
+    const towns = list
+      .map((t) => publicTown(t, launch, c.env.LAUNCH_STATE))
+      .sort(
+        (a, b) =>
+          Number(b.isLive) - Number(a.isLive) ||
+          Number(a.kind === 'community') - Number(b.kind === 'community') ||
+          a.name.localeCompare(b.name),
+      )
+      .slice(0, 10)
+    return c.json({ ok: true, towns })
   },
 )
 
@@ -134,6 +141,8 @@ townRoutes.get(
   describeRoute({
     tags: ['Towns'],
     summary: 'Neighborhoods of a town',
+    description:
+      'Active neighborhoods (City of Wichita associations for 2079000), A–Z. Empty for towns without a neighborhood layer.',
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -154,10 +163,15 @@ townRoutes.get(
   }),
   requireSession,
   async (c) => {
-    const { towns } = collections(getDb())
-    const town = await towns.findOne({ geoid: c.req.param('geoid') }, { projection: { neighborhoods: 1 } })
-    if (!town) throw new ApiError(404, 'not_found')
-    return c.json({ ok: true, neighborhoods: town.neighborhoods })
+    const g = geo(getDb())
+    const geoid = c.req.param('geoid')
+    if (!(await g.towns.findOne({ geoid }, { projection: { _id: 1 } }))) throw new ApiError(404, 'not_found')
+    const list = await g.neighborhoods
+      .find({ townGeoid: geoid, active: true }, { projection: { id: 1, name: 1 } })
+      .collation({ locale: 'en', strength: 2 })
+      .sort({ name: 1 })
+      .toArray()
+    return c.json({ ok: true, neighborhoods: list.map((n) => ({ id: n.id, name: n.name })) })
   },
 )
 
@@ -168,7 +182,7 @@ townRoutes.get(
     tags: ['Towns'],
     summary: 'Interest in an unopened town',
     description:
-      'NotHereYet: how many neighbors want Goodtown here, whether this account already asked, and the nearest live town.',
+      'NotHereYet: how many neighbors want Goodtown here, whether this account already asked, and the nearest live town with the distance in miles.',
     security: [{ bearerAuth: [] }],
     responses: {
       200: {
@@ -189,26 +203,22 @@ townRoutes.get(
   async (c) => {
     const user = c.get('user')
     const geoid = c.req.param('geoid')
-    const { towns, townRequests } = collections(getDb())
-    const town = await towns.findOne({ geoid })
+    const db = getDb()
+    const { townRequests } = collections(db)
+    const town = await geo(db).towns.findOne({ geoid }, { projection: { geometry: 0 } })
     if (!town) throw new ApiError(404, 'not_found')
-    const [wantCount, mine, nearestLive] = await Promise.all([
+    const [wantCount, mine, launch] = await Promise.all([
       townRequests.countDocuments({ geoid }),
       townRequests.findOne({ geoid, userId: user.id }),
-      towns.findOne({
-        isLive: true,
-        location: { $near: { $geometry: town.location } },
-      }),
+      launchTowns(db),
     ])
-    const miles = nearestLive
-      ? Math.round(haversineKm(town.location.coordinates, nearestLive.location.coordinates) * 0.621371)
-      : null
+    const nearest = nearestLaunch(town.center, launch)
     return c.json({
       ok: true,
       wantCount,
       alreadyRequested: !!mine,
-      nearestLive: nearestLive ? publicTown(nearestLive) : null,
-      nearestLiveMiles: miles,
+      nearestLive: nearest ? publicTown(nearest.town, launch, c.env.LAUNCH_STATE) : null,
+      nearestLiveMiles: nearest?.miles ?? null,
     })
   },
 )
@@ -240,8 +250,9 @@ townRoutes.post(
   async (c) => {
     const user = c.get('user')
     const geoid = c.req.param('geoid')
-    const { towns, townRequests } = collections(getDb())
-    if (!(await towns.findOne({ geoid }, { projection: { _id: 1 } }))) throw new ApiError(404, 'not_found')
+    const db = getDb()
+    const { townRequests } = collections(db)
+    if (!(await geo(db).towns.findOne({ geoid }, { projection: { _id: 1 } }))) throw new ApiError(404, 'not_found')
     await townRequests.updateOne(
       { geoid, userId: user.id },
       { $setOnInsert: { geoid, userId: user.id, createdAt: new Date() } },
@@ -254,12 +265,3 @@ townRoutes.post(
     })
   },
 )
-
-function haversineKm([lng1, lat1]: [number, number], [lng2, lat2]: [number, number]): number {
-  const R = 6371
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(a))
-}

@@ -30,20 +30,7 @@ export interface SignupDenial {
   clearedAt?: Date
 }
 
-export interface Town {
-  _id?: ObjectId
-  geoid: string
-  name: string
-  state: string
-  county: string
-  isLive: boolean
-  /** GeoJSON point [lng, lat] — 2dsphere index. */
-  location: { type: 'Point'; coordinates: [number, number] }
-  /** Metres from the centre that still count as "in town". */
-  radiusM: number
-  neighborhoods: Array<{ id: string; name: string }>
-}
-
+/** "I want Goodtown here" — `geoid` is a Census place GEOID (see src/geo). */
 export interface TownRequest {
   _id?: ObjectId
   geoid: string
@@ -55,20 +42,16 @@ export function collections(db: Db) {
   return {
     profiles: db.collection<Profile>('profiles'),
     signupDenials: db.collection<SignupDenial>('signupDenials'),
-    towns: db.collection<Town>('towns'),
     townRequests: db.collection<TownRequest>('townRequests'),
   }
 }
 
-/** Idempotent; run from the seed script or a one-off admin route. */
+/** Idempotent; run at server start (geo indexes live in src/geo/model.ts). */
 export async function ensureIndexes(db: Db) {
   const c = collections(db)
   await Promise.all([
     c.profiles.createIndex({ userId: 1 }, { unique: true }),
     c.signupDenials.createIndex({ identifierHash: 1 }, { unique: true }),
-    c.towns.createIndex({ geoid: 1 }, { unique: true }),
-    c.towns.createIndex({ location: '2dsphere' }),
-    c.towns.createIndex({ state: 1, name: 1 }),
     c.townRequests.createIndex({ geoid: 1, userId: 1 }, { unique: true }),
   ])
 }
