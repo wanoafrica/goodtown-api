@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 # Goodtown API — Hono on Node 22. Build: docker build -t goodtown-api .   Run: see docker-compose.yml
+# For reproducible production builds pin the base image by digest, e.g.
+#   docker build --build-arg NODE_IMAGE=node:22-alpine@sha256:<digest> .
+ARG NODE_IMAGE=node:22-alpine
 
-FROM node:22-alpine AS deps
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
@@ -11,7 +14,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM node:22-alpine AS runtime
+FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 RUN addgroup -S app && adduser -S app -G app

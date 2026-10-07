@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ERROR_CODES } from '../lib/errors'
 
 /** Zod schemas used only to describe responses in the OpenAPI document. Keep in step with docs/api.md. */
 
@@ -6,19 +7,7 @@ export const okSchema = z.object({ ok: z.literal(true) })
 
 export const errorSchema = z.object({
   ok: z.literal(false),
-  code: z.enum([
-    'unauthorized',
-    'forbidden',
-    'not_found',
-    'validation',
-    'no_account',
-    'under_18',
-    'invalid_name',
-    'invalid_date',
-    'already_completed',
-    'rate_limited',
-    'internal',
-  ]),
+  code: z.enum(ERROR_CODES),
   message: z.string().optional(),
   details: z.unknown().optional(),
 })

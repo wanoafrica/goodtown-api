@@ -1,4 +1,8 @@
 # Local run of the production image: docker compose up --build
+# Uses MONGODB_URI from .env (Atlas). To run fully offline against a local MongoDB instead:
+#   docker compose --profile local-db up --build
+# with MONGODB_URI=mongodb://mongo:27017/?replicaSet=rs0 in .env. MongoDB runs as a single-node
+# replica set because Better Auth's adapter uses transactions.
 services:
   api:
     build: .
@@ -7,4 +11,35 @@ services:
     env_file: .env
     environment:
       PORT: "8080"
+      # No proxy in front locally: client-IP headers are taken from the socket (see src/lib/clientIp.ts).
+      TRUST_PROXY: "0"
+    depends_on:
+      mongo:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
+
+  mongo:
+    image: mongo:8
+    profiles: [local-db]
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first start, then reports healthy once it has a primary.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok }"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  mongo-data:

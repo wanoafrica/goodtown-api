@@ -5,6 +5,7 @@ import { closeMongo, connectMongo, getDb } from './db/client'
 import { ensureIndexes } from './db/collections'
 import { ensureGeoIndexes } from './geo/model'
 import { loadEnv } from './env'
+import { withClientIp } from './lib/clientIp'
 
 // Local development: read `.env` if present (production injects real environment variables).
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -16,24 +17,11 @@ connectMongo(env)
 await getDb().command({ ping: 1 })
 await Promise.all([ensureIndexes(getDb()), ensureGeoIndexes(getDb())])
 
-/**
- * Behind a reverse proxy the client IP arrives in X-Forwarded-For (what Better Auth's rate limiter
- * reads, see TRUSTED_IP_HEADERS). For direct connections (local dev, no proxy) fill it from the
- * socket so every client still gets its own rate-limit bucket.
- */
-function withClientIp(request: Request, bindings: HttpBindings): Request {
-  if (request.headers.get('x-forwarded-for')) return request
-  const ip = bindings.incoming.socket.remoteAddress
-  if (!ip) return request
-  const headers = new Headers(request.headers)
-  headers.set('x-forwarded-for', ip)
-  return new Request(request, { headers })
-}
-
 const server = serve(
   {
     // Hono's `c.env` is whatever we pass as the second argument.
-    fetch: (request, bindings) => app.fetch(withClientIp(request, bindings as HttpBindings), env),
+    fetch: (request, bindings) =>
+      app.fetch(withClientIp(request, env, (bindings as HttpBindings).incoming.socket.remoteAddress), env),
     port: env.PORT,
     // No hostname → Node listens dual-stack (IPv4 + IPv6), so both 127.0.0.1 and ::1 work
     // (adb reverse / proxies may use either).

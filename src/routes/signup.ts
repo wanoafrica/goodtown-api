@@ -3,7 +3,7 @@ import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import type { Env } from '../env'
 import { getDb } from '../db/client'
-import { collections } from '../db/collections'
+import { collections, isDenied, isDuplicateKey } from '../db/collections'
 import { ApiError } from '../lib/errors'
 import { identifierHash } from '../lib/hash'
 import { validationHook } from '../lib/validate'
@@ -71,18 +71,7 @@ signupRoutes.post(
     const db = getDb()
     const { profiles, signupDenials } = collections(db)
 
-    const hash = await identifierHash(user.email)
-    if (
-      await signupDenials.findOne({
-        identifierHash: hash,
-        clearedAt: { $exists: false },
-      })
-    ) {
-      throw new ApiError(403, 'under_18')
-    }
-
-    const existing = await profiles.findOne({ userId: user.id })
-    if (existing?.birthdate) throw new ApiError(409, 'already_completed', 'Birthday cannot be changed')
+    if (await isDenied(db, user.email)) throw new ApiError(403, 'under_18')
 
     const name = normaliseName(rawName)
     if (!name) throw new ApiError(422, 'invalid_name', 'Add a name so neighbors know who’s posting.')
@@ -91,6 +80,7 @@ signupRoutes.post(
     if (!birthdate) throw new ApiError(422, 'invalid_date', 'That date doesn’t exist. Check the month and day.')
 
     if (!isAdult(birthdate)) {
+      const hash = await identifierHash(user.email)
       await signupDenials.updateOne(
         { identifierHash: hash },
         {
@@ -106,24 +96,35 @@ signupRoutes.post(
     }
 
     const now = new Date()
-    await profiles.updateOne(
-      { userId: user.id },
-      {
-        $set: { name, birthdate: rawDate, updatedAt: now },
-        $setOnInsert: {
-          userId: user.id,
-          townStepDone: false,
-          homeTownGeoid: null,
-          neighborhoodId: null,
-          termsVersion: null,
-          termsAcceptedAt: null,
-          pushTokens: [],
-          suspended: false,
-          createdAt: now,
+    // The birthdate filter makes "set once" atomic: if a profile with a birthdate already exists, the
+    // upsert tries to insert a second profile for this user and the unique userId index rejects it.
+    try {
+      await profiles.updateOne(
+        { userId: user.id, birthdate: { $exists: false } },
+        {
+          $set: { name, birthdate: rawDate, updatedAt: now },
+          $setOnInsert: {
+            userId: user.id,
+            townStepDone: false,
+            homeTownGeoid: null,
+            neighborhoodId: null,
+            termsVersion: null,
+            termsAcceptedAt: null,
+            pushTokens: [],
+            suspended: false,
+            createdAt: now,
+          },
         },
-      },
-      { upsert: true },
-    )
+        { upsert: true },
+      )
+    } catch (err) {
+      if (!isDuplicateKey(err)) throw err
+      // Already completed. A retry with the same data (e.g. the first response was lost) succeeds.
+      const existing = await profiles.findOne({ userId: user.id }, { projection: { name: 1, birthdate: 1 } })
+      if (existing?.birthdate !== rawDate || existing?.name !== name) {
+        throw new ApiError(409, 'already_completed', 'Birthday cannot be changed')
+      }
+    }
     return c.json({ ok: true })
   },
 )

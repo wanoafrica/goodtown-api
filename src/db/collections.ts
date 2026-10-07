@@ -1,4 +1,5 @@
-import type { Db, ObjectId } from 'mongodb'
+import { MongoServerError, type Db, type ObjectId } from 'mongodb'
+import { identifierHash } from '../lib/hash'
 
 /** Profile data Goodtown keeps beyond what Better Auth stores on `user`. Keyed by Better Auth user id. */
 export interface Profile {
@@ -53,5 +54,22 @@ export async function ensureIndexes(db: Db) {
     c.profiles.createIndex({ userId: 1 }, { unique: true }),
     c.signupDenials.createIndex({ identifierHash: 1 }, { unique: true }),
     c.townRequests.createIndex({ geoid: 1, userId: 1 }, { unique: true }),
+    // Better Auth never deletes expired rows itself; let MongoDB expire sessions and OTP codes.
+    db.collection('session').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'expiresAt_ttl' }),
+    db.collection('verification').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0, name: 'expiresAt_ttl' }),
   ])
+}
+
+/** Active (not cleared) under-18 refusal for this login identifier, if any. */
+export async function isDenied(db: Db, email: string): Promise<boolean> {
+  const denial = await collections(db).signupDenials.findOne(
+    { identifierHash: await identifierHash(email), clearedAt: { $exists: false } },
+    { projection: { _id: 1 } },
+  )
+  return !!denial
+}
+
+/** True for E11000 — a unique index rejected the write (e.g. a concurrent upsert won the race). */
+export function isDuplicateKey(err: unknown): boolean {
+  return err instanceof MongoServerError && err.code === 11000
 }

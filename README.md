@@ -15,20 +15,29 @@ npm run dev                           # http://localhost:8080 (tsx watch)
 #   http://localhost:8080/openapi.json  OpenAPI 3.1 document
 ```
 
-Node 22+ (uses `process.loadEnvFile`). Codes are logged instead of emailed while `OTP_DEBUG_LOG=1`.
+Node 22+ (uses `process.loadEnvFile`). Codes are logged instead of emailed while `OTP_DEBUG_LOG=1`; without it
+`SENDGRID_API_KEY` is required, and `OTP_DEBUG_LOG=1` is refused when `NODE_ENV=production` (the Docker image).
+
+**Docker locally**: `docker compose up --build` runs the production image against `MONGODB_URI` from `.env` (Atlas).
+Fully offline: `docker compose --profile local-db up --build` with `MONGODB_URI=mongodb://mongo:27017/?replicaSet=rs0`
+— a single-node replica set (Better Auth's adapter uses transactions), data in the `mongo-data` volume.
 
 ## Deploy
 
-The API is a Docker image (`Dockerfile`: Node 22 alpine, non-root, `/health` healthcheck, port 8080).
+The API is a Docker image (`Dockerfile`: Node 22 alpine, non-root, `/health` healthcheck, port 8080; pin the base image
+by digest with `--build-arg NODE_IMAGE=node:22-alpine@sha256:…`). `GET /ready` also checks the database.
 
 **DigitalOcean App Platform** (recommended): Create App → GitHub → `wanoafrica/goodtown-api` → it detects the Dockerfile.
 Set the secrets `MONGODB_URI`, `BETTER_AUTH_SECRET`, `SENDGRID_API_KEY` as encrypted env vars and `BETTER_AUTH_URL` to the
-app's public URL (`${APP_URL}` works in the spec). `.do/app.yaml` has the full spec. Deploys on every push to `main`.
+app's public URL (`${APP_URL}` works in the spec). `.do/app.yaml` has the full spec (it sets `TRUSTED_IP_HEADERS=do-connecting-ip` + `TRUST_PROXY=1` so rate limits see the
+real client IP). Deploys on every push to `main`.
 Atlas Network Access must allow the app's egress IPs (or `0.0.0.0/0`).
 
 **Anywhere else**: `docker build -t goodtown-api . && docker run --env-file .env -p 8080:8080 goodtown-api`, behind any
-TLS-terminating proxy (Caddy, nginx, the platform's). The proxy must pass the client IP in `X-Forwarded-For`
-(`TRUSTED_IP_HEADERS`) — Better Auth rate-limits OTP sends per IP.
+TLS-terminating proxy (Caddy, nginx, the platform's). Have the proxy put the client IP in a single-value header (e.g.
+`X-Real-IP`), set `TRUSTED_IP_HEADERS` to it and `TRUST_PROXY=1`. Without `TRUST_PROXY=1` the API ignores client-sent IP
+headers and uses the socket address — otherwise anyone could dodge the per-IP limits by sending a fake header.
+Rate-limit counters are in memory: keep one instance (or move them to MongoDB) before scaling out.
 
 History: the API ran on Cloudflare Workers until 2026-10-06. It moved to a Node host because the MongoDB driver needs a
 long-lived connection pool, which Workers cannot keep across requests (see git history for the per-request workaround).
@@ -43,10 +52,10 @@ src/
   geo/              Kansas map: collections + 2dsphere indexes (model), live/launch rules (live), point → county/town/neighborhood (locate), name helpers (names)
   domain/           pure rules: age/birthdate, name, signup state machine
   routes/           auth · signup · towns · me
-  middleware/       requireSession
-  lib/              sendgrid · errors · hash
+  middleware/       requireSession · rateLimit
+  lib/              sendgrid · errors · hash · clientIp
 scripts/load-kansas.ts   loads the map (below)
-test/               vitest unit tests for the domain rules + geo helpers
+test/               vitest unit tests for the domain rules, geo helpers, env/IP/rate-limit/error hardening
 ```
 
 ## API docs

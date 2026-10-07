@@ -14,13 +14,18 @@ Auth: Bearer token in `Authorization: Bearer <token>`. The token is issued by Be
 | `under_18` | 403 | permanent refusal for this login |
 | `invalid_name` | 422 | name failed server rules → back to AuthName |
 | `invalid_date` | 422 | birthdate does not exist / future / < 1900 |
-| `already_completed` | 409 | birthday already set — immutable |
+| `already_completed` | 409 | birthday already set — immutable (a retry with the *same* name + birthdate returns 200) |
 | `validation` | 400/422/409 | 400 = request failed schema validation (`details` = Zod issues); 422/409 = other input problem (`message` explains) |
 | `not_found` | 404 | unknown town / neighborhood |
-| `rate_limited` | 429 | too many OTP sends / attempts (Better Auth) |
+| `rate_limited` | 429 | too many `/v1/auth/email/check` calls (10/min per IP, `Retry-After` header). Better Auth's own 429s (OTP send/verify) carry **no** `code` — clients map on the HTTP status |
 | `internal` | 500 | |
 
+Error codes are defined once in `src/lib/errors.ts` (`ERROR_CODES`); the OpenAPI schema is built from that list.
+A body that is not valid JSON is `400 validation`.
+
 ## Mapping to the Android repositories
+The iOS repositories (`ios/Goodtown/Data/`) mirror these names and calls one-to-one.
+
 | Android call | HTTP |
 |---|---|
 | `AuthRepository.requestEmailCode(email, LogIn)` | `POST /v1/auth/email/check` → if `exists:false` raise `NoAccountException`; else `POST /api/auth/email-otp/send-verification-otp {email, type:"sign-in"}` |
@@ -49,6 +54,7 @@ shared with every public dataset, and what `homeTownGeoid` / town requests store
 neighborhood ids look like `wichita_city:DELANO`.
 
 ## Better Auth endpoints used (under `/api/auth`)
+Only these four are reachable; every other Better Auth path answers `404 not_found`.
 - `POST /email-otp/send-verification-otp` `{ email, type: "sign-in" }` — 3/min per IP
 - `POST /sign-in/email-otp` `{ email, otp }` — creates the user on first success; 5 attempts per code, 5-minute expiry
 - `GET /get-session` — validates the bearer token
@@ -58,6 +64,11 @@ neighborhood ids look like `wichita_city:DELANO`.
 - Adults only: `complete_signup` with age < 18 → `under_18`, and a SHA-256 of the email goes on the denial list permanently (admin clears via `clearedAt`).
 - Birthday immutable after `complete_signup`.
 - Home town must be a **live** town; `null` or an omitted `geoid` = browse mode. Either sets `townStepDone`.
+- Push tokens: a token belongs to the account signed in on that device now — registering it removes it from every other profile. At most 10 tokens per account (oldest dropped).
+- Rate limits are per client IP: the socket address, or `TRUSTED_IP_HEADERS` (production: `do-connecting-ip`) only when `TRUST_PROXY=1`.
+- Expired sessions and OTP codes are removed by MongoDB TTL indexes (`session.expiresAt`, `verification.expiresAt`). OTP codes are stored hashed.
+- The request log never contains query strings (they carry coordinates and search terms).
+- `GET /health` = process up (liveness); `GET /ready` = database reachable (503 otherwise).
 - Sessions resolved from a bearer token are cached in the API process for 30 s (sign-out evicts immediately), so a burst of calls from one screen does one session lookup.
 - `terms.version` must equal the server's `TERMS_VERSION` or the call is rejected with the current version in `details`.
 - Launch areas = `launch_areas` (Wichita centre, 25 mi). `resolve` is **live** when the *point* is inside one; the town comes from Census boundaries (county → smallest containing place), rural points snap to the nearest town centre within 40 km, and anything outside every Kansas county is `outside_launch_area`.

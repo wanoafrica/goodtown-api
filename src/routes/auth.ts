@@ -4,9 +4,9 @@ import { z } from 'zod'
 import type { Env } from '../env'
 import { createAuth } from '../auth'
 import { getDb } from '../db/client'
-import { collections } from '../db/collections'
-import { identifierHash } from '../lib/hash'
+import { collections, isDenied } from '../db/collections'
 import { validationHook } from '../lib/validate'
+import { rateLimit } from '../middleware/rateLimit'
 import { authStateResponse, emailCheckResponse, errorSchema } from '../openapi/schemas'
 import { requireSession, type AppVariables } from '../middleware/session'
 import { signupState } from '../domain/signupState'
@@ -37,6 +37,8 @@ authRoutes.post(
       },
     },
   }),
+  // Public and reveals whether an account exists, so throttle bulk lookups.
+  rateLimit({ windowMs: 60_000, max: 10 }),
   validator('json', z.object({ email: z.email() }), validationHook),
   async (c) => {
     const { email } = c.req.valid('json')
@@ -72,15 +74,11 @@ authRoutes.get(
   async (c) => {
     const user = c.get('user')
     const db = getDb()
-    const { profiles, signupDenials } = collections(db)
-    const [profile, denial] = await Promise.all([
-      profiles.findOne({ userId: user.id }),
-      signupDenials.findOne({
-        identifierHash: await identifierHash(user.email),
-        clearedAt: { $exists: false },
-      }),
+    const [profile, denied] = await Promise.all([
+      collections(db).profiles.findOne({ userId: user.id }),
+      isDenied(db, user.email),
     ])
-    const state = signupState(profile, !!denial, c.env.TERMS_VERSION)
+    const state = signupState(profile, denied, c.env.TERMS_VERSION)
     return c.json({
       ok: true,
       ...state,

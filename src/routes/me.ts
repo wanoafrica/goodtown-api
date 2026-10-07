@@ -5,11 +5,14 @@ import type { Env } from '../env'
 import { getDb } from '../db/client'
 import { collections } from '../db/collections'
 import { isLiveTown, launchTowns } from '../geo/live'
-import { geo } from '../geo/model'
+import { geo, requireTown } from '../geo/model'
 import { ApiError } from '../lib/errors'
 import { requireSession, type AppVariables } from '../middleware/session'
 import { validationHook } from '../lib/validate'
 import { errorSchema, okSchema } from '../openapi/schemas'
+
+/** Devices remembered per account for push; the oldest is dropped beyond this. */
+const MAX_PUSH_TOKENS = 10
 
 export const meRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>()
 meRoutes.use('*', requireSession)
@@ -62,8 +65,7 @@ meRoutes.put(
     const { profiles } = collections(db)
     if (geoid) {
       const g = geo(db)
-      const town = await g.towns.findOne({ geoid }, { projection: { geometry: 0 } })
-      if (!town) throw new ApiError(404, 'not_found', 'Unknown town')
+      const town = await requireTown(db, geoid, 'Unknown town')
       if (!isLiveTown(town, await launchTowns(db)))
         throw new ApiError(422, 'validation', 'Goodtown is not open in this town yet')
       if (
@@ -172,11 +174,14 @@ meRoutes.post(
     const user = c.get('user')
     const { token, platform } = c.req.valid('json')
     const { profiles } = collections(getDb())
-    await profiles.updateOne({ userId: user.id }, { $pull: { pushTokens: { token } } })
+    // A device belongs to whoever is signed in on it now: drop the token from every profile (including a
+    // previous account on the same phone, which must stop receiving its notifications here), then add it
+    // back to this one. Keep at most MAX_PUSH_TOKENS devices per account, newest last.
+    await profiles.updateMany({ 'pushTokens.token': token }, { $pull: { pushTokens: { token } } })
     await profiles.updateOne(
       { userId: user.id },
       {
-        $push: { pushTokens: { token, platform, updatedAt: new Date() } },
+        $push: { pushTokens: { $each: [{ token, platform, updatedAt: new Date() }], $slice: -MAX_PUSH_TOKENS } },
         $set: { updatedAt: new Date() },
       },
     )

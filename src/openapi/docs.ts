@@ -3,10 +3,7 @@ import { createMiddleware } from 'hono/factory'
 import { generateSpecs } from 'hono-openapi'
 import { Scalar } from '@scalar/hono-api-reference'
 import type { Env } from '../env'
-import { createAuth } from '../auth'
-
-/** Better Auth endpoints the apps actually call; the rest of its catalogue is left out of our document. */
-const AUTH_PATHS = ['/email-otp/send-verification-otp', '/sign-in/email-otp', '/get-session', '/sign-out']
+import { BETTER_AUTH_PATHS, createAuth } from '../auth'
 
 /**
  * Mounts `GET /openapi.json` (OpenAPI 3.1 generated from the Zod validators and
@@ -14,7 +11,7 @@ const AUTH_PATHS = ['/email-otp/send-verification-otp', '/sign-in/email-otp', '/
  * and `GET /docs` (Scalar API reference UI).
  */
 export function mountDocs(app: Hono<{ Bindings: Env }>) {
-  // Gate: both endpoints 404 unless DOCS_ENABLED=1 (set in .dev.vars; off in production).
+  // Gate: both endpoints 404 unless DOCS_ENABLED=1 (set in .env locally; off in production).
   const gate = createMiddleware<{ Bindings: Env }>(async (c, next) => {
     if (c.env.DOCS_ENABLED !== '1') return c.json({ ok: false, code: 'not_found' }, 404)
     await next()
@@ -79,7 +76,7 @@ export function mountDocs(app: Hono<{ Bindings: Env }>) {
       paths: Record<string, Record<string, Record<string, unknown>>>
       components?: { schemas?: Record<string, never> }
     }
-    for (const p of AUTH_PATHS) {
+    for (const p of BETTER_AUTH_PATHS) {
       const item = authSchema.paths[p]
       if (!item) continue
       const tagged = Object.fromEntries(Object.entries(item).map(([m, op]) => [m, { ...op, tags: ['Better Auth'] }]))

@@ -4,6 +4,10 @@ import { mongodbAdapter } from '@better-auth/mongo-adapter'
 import type { Env } from './env'
 import { getDb, getMongo } from './db/client'
 import { sendOtpEmail } from './lib/sendgrid'
+import { ipHeaders } from './lib/clientIp'
+
+/** The Better Auth endpoints the apps call (relative to /api/auth); everything else is blocked in index.ts. */
+export const BETTER_AUTH_PATHS = ['/email-otp/send-verification-otp', '/sign-in/email-otp', '/get-session', '/sign-out']
 
 let cached: { key: string; auth: ReturnType<typeof buildAuth> } | undefined
 
@@ -39,8 +43,8 @@ function buildAuth(env: Env) {
       expiresIn: 60 * 60 * 24 * 90, // 90 days — phones stay signed in
       updateAge: 60 * 60 * 24, // refresh the expiry at most once a day
     },
-    // Behind a reverse proxy the client IP arrives in a header; Better Auth rate-limits per IP.
-    advanced: { ipAddress: { ipAddressHeaders: env.TRUSTED_IP_HEADERS.split(',').map((h) => h.trim()) } },
+    // Better Auth rate-limits per client IP, read from these headers (made trustworthy by withClientIp).
+    advanced: { ipAddress: { ipAddressHeaders: ipHeaders(env) } },
     rateLimit: {
       enabled: true,
       window: 60,
@@ -55,6 +59,8 @@ function buildAuth(env: Env) {
         otpLength: 6,
         expiresIn: 300,
         allowedAttempts: 5,
+        // Store a hash, not the code: a read of the verification table must not yield usable codes.
+        storeOTP: 'hashed',
         async sendVerificationOTP({ email, otp, type }) {
           if (type !== 'sign-in') return
           // Both the log-in and sign-up flows send type "sign-in"; the copy differs by whether the account exists yet.

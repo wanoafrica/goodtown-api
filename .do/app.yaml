@@ -18,8 +18,12 @@ services:
     envs:
       - key: BETTER_AUTH_URL
         value: ${APP_URL}
+      # App Platform's edge sets do-connecting-ip to the real client IP (single value, not spoofable
+      # through the proxy); TRUST_PROXY=1 tells the API to read it instead of the socket address.
       - key: TRUSTED_IP_HEADERS
-        value: x-forwarded-for
+        value: do-connecting-ip
+      - key: TRUST_PROXY
+        value: "1"
       - key: DOCS_ENABLED
         value: "0"
       # Set these as encrypted secrets in the dashboard (Settings → api → Environment Variables):

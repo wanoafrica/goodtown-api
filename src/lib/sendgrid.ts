@@ -6,7 +6,8 @@ export const OTP_MINUTES = 5
 
 /**
  * Sends the 6-digit code with SendGrid's v3 Mail Send REST API (plain fetch; the
- * Node SDK is a heavy dependency for one call). With OTP_DEBUG_LOG=1 or no API key it logs instead.
+ * Node SDK is a heavy dependency for one call). With OTP_DEBUG_LOG=1 it logs instead (never in production;
+ * `loadEnv` rejects that combination and requires the API key otherwise).
  */
 export async function sendOtpEmail(env: Env, to: string, otp: string, kind: OtpEmailKind): Promise<void> {
   if (env.OTP_DEBUG_LOG === '1' || !env.SENDGRID_API_KEY) {

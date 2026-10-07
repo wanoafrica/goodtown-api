@@ -4,7 +4,7 @@ import { z } from 'zod'
 import type { Env } from '../env'
 import { getDb } from '../db/client'
 import { collections } from '../db/collections'
-import { geo, type GeoTown } from '../geo/model'
+import { geo, requireTown, type GeoTown } from '../geo/model'
 import { isLivePoint, isLiveTown, launchTowns, nearestLaunch, type LaunchTown } from '../geo/live'
 import { locatePoint } from '../geo/locate'
 import { escapeRegex } from '../geo/names'
@@ -163,9 +163,10 @@ townRoutes.get(
   }),
   requireSession,
   async (c) => {
-    const g = geo(getDb())
+    const db = getDb()
+    const g = geo(db)
     const geoid = c.req.param('geoid')
-    if (!(await g.towns.findOne({ geoid }, { projection: { _id: 1 } }))) throw new ApiError(404, 'not_found')
+    await requireTown(db, geoid)
     const list = await g.neighborhoods
       .find({ townGeoid: geoid, active: true }, { projection: { id: 1, name: 1 } })
       .collation({ locale: 'en', strength: 2 })
@@ -205,8 +206,7 @@ townRoutes.get(
     const geoid = c.req.param('geoid')
     const db = getDb()
     const { townRequests } = collections(db)
-    const town = await geo(db).towns.findOne({ geoid }, { projection: { geometry: 0 } })
-    if (!town) throw new ApiError(404, 'not_found')
+    const town = await requireTown(db, geoid)
     const [wantCount, mine, launch] = await Promise.all([
       townRequests.countDocuments({ geoid }),
       townRequests.findOne({ geoid, userId: user.id }),
@@ -252,7 +252,7 @@ townRoutes.post(
     const geoid = c.req.param('geoid')
     const db = getDb()
     const { townRequests } = collections(db)
-    if (!(await geo(db).towns.findOne({ geoid }, { projection: { _id: 1 } }))) throw new ApiError(404, 'not_found')
+    await requireTown(db, geoid)
     await townRequests.updateOne(
       { geoid, userId: user.id },
       { $setOnInsert: { geoid, userId: user.id, createdAt: new Date() } },

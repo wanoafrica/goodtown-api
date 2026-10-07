@@ -1,3 +1,4 @@
+import { ApiError } from '../lib/errors'
 import type { Db } from 'mongodb'
 
 /**
@@ -93,5 +94,12 @@ export async function ensureGeoIndexes(db: Db) {
 }
 
 /** Wichita, the first launch town (Census place 2079000), 25 miles. */
+/** The town (without its geometry) or a 404 `not_found` — the shared guard for every `:geoid` route. */
+export async function requireTown(db: Db, geoid: string, message?: string): Promise<GeoTown> {
+  const town = await geo(db).towns.findOne({ geoid }, { projection: { geometry: 0 } })
+  if (!town) throw new ApiError(404, 'not_found', message)
+  return town
+}
+
 export const WICHITA_GEOID = '2079000'
 export const DEFAULT_LAUNCH_RADIUS_M = 40_234
