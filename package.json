@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Goodtown REST API \u2014 Hono on Node, MongoDB Atlas, Better Auth",
+  "description": "Goodtown REST API — Hono on Node, MongoDB Atlas, Better Auth",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "esbuild src/server.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist/server.js",
@@ -12,7 +12,8 @@
     "test": "vitest run",
     "load:kansas": "tsx scripts/load-kansas.ts",
     "email:preview": "tsx scripts/preview-email.ts",
-    "format": "prettier -w src scripts test"
+    "format": "prettier -w src scripts test",
+    "seed:feed": "tsx scripts/seed-feed.ts"
   },
   "dependencies": {
     "@better-auth/mongo-adapter": "^1.7.7",
@@ -33,6 +34,7 @@
     "@types/shapefile": "^0.6.4",
     "adm-zip": "^0.6.1",
     "esbuild": "^0.27.0",
+    "mongodb-memory-server": "^11.3.0",
     "polygon-clipping": "^0.15.7",
     "prettier": "^3.9.9",
     "shapefile": "^0.6.6",

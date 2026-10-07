@@ -60,6 +60,10 @@ export function mountDocs(app: Hono<{ Bindings: Env }>) {
               description: 'Launch-area towns: resolve by location, search, interest in unopened towns',
             },
             {
+              name: 'Feed',
+              description: 'Town tab and Player: header, endless feed, reactions, saved events',
+            },
+            {
               name: 'Me',
               description: 'Home town, terms acceptance, push tokens',
             },

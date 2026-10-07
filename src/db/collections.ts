@@ -18,6 +18,9 @@ export interface Profile {
   termsAcceptedAt: Date | null
   pushTokens: Array<{ token: string; platform: 'android' | 'ios'; updatedAt: Date }>
   suspended: boolean
+  /** Town tab visits (src/feed/feed.ts `touchVisit`): last activity, and where "new" starts. */
+  townSeenAt?: Date
+  townBaselineAt?: Date
   createdAt: Date
   updatedAt: Date
 }

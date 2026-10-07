@@ -83,3 +83,79 @@ export const requestResponse = z.object({
   wantCount: z.number().int(),
   alreadyRequested: z.literal(true),
 })
+
+// MARK: - Town feed (Figma Main 5:628, Player 5:2408)
+
+const authorSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  isBusiness: z.boolean(),
+  isVerified: z.boolean(),
+  avatarTone: z.number().int().describe('0–4: which letter-avatar colour the apps use'),
+})
+
+const feedBusinessSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  isVerified: z.boolean(),
+  isOpenNow: z.boolean().nullable().describe('null when the business has no opening hours'),
+  distanceMiles: z.number().nullable().describe("From the viewer's home neighborhood (or town) centre"),
+  dealId: z.string().nullable().describe('A live deal → "Get deal"'),
+  thumbnailUrl: z.string().nullable(),
+  thumbnailTone: z.number().int(),
+})
+
+export const reactionEnum = z.enum(['want_to_go', 'love', 'been_there', 'save', 'thanks'])
+
+export const feedItemSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('video'),
+    id: z.string(),
+    author: authorSchema,
+    title: z.string(),
+    quote: z.string().nullable(),
+    place: z.string().describe('Neighborhood name'),
+    postedAt: z.string().describe('ISO 8601'),
+    isNew: z.boolean().describe('Posted since the viewer’s previous visit'),
+    videoUrl: z.string(),
+    thumbnailUrl: z.string().nullable(),
+    thumbnailTone: z.number().int(),
+    business: feedBusinessSchema.nullable(),
+    myReactions: z.array(reactionEnum),
+  }),
+  z.object({
+    type: z.literal('event'),
+    id: z.string(),
+    title: z.string(),
+    startsAt: z.string(),
+    place: z.string(),
+    category: z.string(),
+    saved: z.boolean(),
+  }),
+  z.object({
+    type: z.literal('deal'),
+    id: z.string(),
+    title: z.string(),
+    businessName: z.string(),
+    endsAt: z.string(),
+  }),
+  z.object({ type: z.literal('caught_up').describe('"That’s everything new today"; older posts follow') }),
+])
+
+export const feedResponse = z.object({
+  ok: z.literal(true),
+  items: z.array(feedItemSchema),
+  nextCursor: z.string().nullable().describe('Pass back as `cursor`; null = end of the feed'),
+})
+
+export const townHomeResponse = z.object({
+  ok: z.literal(true),
+  town: z.object({ geoid: z.string(), name: z.string() }),
+  firstName: z.string().nullable(),
+  newSinceLastVisit: z.number().int(),
+  todayNote: z.string().nullable().describe('e.g. "72° sunny · outdoor picks first"; null hides the line'),
+  today: z.object({ videos: z.number().int(), events: z.number().int(), deals: z.number().int() }),
+  neighborsPostingToday: z.array(z.object({ id: z.string(), name: z.string(), avatarTone: z.number().int() })),
+})
+
+export const toggleResponse = z.object({ ok: z.literal(true), active: z.boolean() })

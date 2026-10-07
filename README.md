@@ -51,11 +51,14 @@ src/
   db/               Mongo client (one per process), collections + indexes
   geo/              Kansas map: collections + 2dsphere indexes (model), live/launch rules (live), point → county/town/neighborhood (locate), name helpers (names)
   domain/           pure rules: age/birthdate, name, signup state machine
-  routes/           auth · signup · towns · me
+  routes/           auth · signup · towns · me · feed
+  feed/             Town feed: collections + indexes (model), page builder / visits (feed), local time + hours (time)
   middleware/       requireSession · rateLimit
   lib/              sendgrid · errors · hash · clientIp
 scripts/load-kansas.ts   loads the map (below)
-test/               vitest unit tests for the domain rules, geo helpers, env/IP/rate-limit/error hardening
+scripts/seed-feed.ts     demo feed content (`npm run seed:feed`, `-- --remove` to delete it)
+test/               vitest: domain rules, geo helpers, hardening, and the feed against an in-memory MongoDB
+                    (mongodb-memory-server — the first run downloads a mongod binary)
 ```
 
 ## API docs

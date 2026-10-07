@@ -22,6 +22,8 @@ Commit as `Nasir Khalid <nasir.khalid.new@gmail.com>`, plain messages, no `Co-Au
 other trailers. Production secrets are set in the hosting dashboard, never in the repo.
 
 ## Where things stand (2026-10-07)
-- Done: auth + sign-up state machine, towns/geo (Census), home town, terms, push-token stubs, emails, Docker.
+- Done: auth + sign-up state machine, towns/geo (Census), home town, terms, push-token stubs, emails, Docker,
+  Town feed (`/v1/town/home`, `/v1/feed`, reactions, event saves; `npm run seed:feed` for demo content).
 - Next: deploy on DigitalOcean App Platform (`.do/app.yaml`), then point the apps' release `API_BASE_URL` at it;
-  suspension enforcement (revoke sessions + reject in `requireSession`); Delete-account; phone OTP; push sending.
+  suspension enforcement (revoke sessions + reject in `requireSession`); video upload + moderation (posts are
+  only seeded today); weather for `todayNote`; Delete-account; phone OTP; push sending.

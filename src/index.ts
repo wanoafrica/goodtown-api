@@ -9,6 +9,7 @@ import { authRoutes } from './routes/auth'
 import { signupRoutes } from './routes/signup'
 import { townRoutes } from './routes/towns'
 import { meRoutes } from './routes/me'
+import { feedRoutes } from './routes/feed'
 import { mountDocs } from './openapi/docs'
 import { evictSessionFrom } from './middleware/session'
 
@@ -55,6 +56,7 @@ app.route('/v1/auth', authRoutes)
 app.route('/v1/signup', signupRoutes)
 app.route('/v1/towns', townRoutes)
 app.route('/v1/me', meRoutes)
+app.route('/v1', feedRoutes)
 
 // OpenAPI document + Scalar reference UI (mount after the routes so they are all in the document).
 mountDocs(app)

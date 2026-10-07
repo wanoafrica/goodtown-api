@@ -42,6 +42,10 @@ The iOS repositories (`ios/Goodtown/Data/`) mirror these names and calls one-to-
 | `TownRepository.interest(geoid)` | `GET /v1/towns/:geoid/interest` → `{wantCount, alreadyRequested, nearestLive, nearestLiveMiles}` |
 | `TownRepository.requestTown(geoid)` | `POST /v1/towns/:geoid/request` |
 | `TownRepository.setHomeTown(geoid?, neighborhoodId?)` | `PUT /v1/me/home-town {geoid \| null, neighborhoodId?}` |
+| `FeedRepository.home()` | `GET /v1/town/home` |
+| `FeedRepository.feed(category, cursor)` | `GET /v1/feed?category=all\|food\|events\|family\|outdoors\|shops\|sports&cursor=` |
+| `FeedRepository.setReaction(r, postId, active)` | `PUT` / `DELETE /v1/posts/:id/reactions/:reaction` (`want_to_go`, `love`, `been_there`, `save`, `thanks`) |
+| `FeedRepository.setEventSaved(eventId, saved)` | `PUT` / `DELETE /v1/events/:id/save` |
 
 ## Town object
 ```json
@@ -73,3 +77,39 @@ Only these four are reachable; every other Better Auth path answers `404 not_fou
 - `terms.version` must equal the server's `TERMS_VERSION` or the call is rejected with the current version in `details`.
 - Launch areas = `launch_areas` (Wichita centre, 25 mi). `resolve` is **live** when the *point* is inside one; the town comes from Census boundaries (county → smallest containing place), rural points snap to the nearest town centre within 40 km, and anything outside every Kansas county is `outside_launch_area`.
 - `search` returns up to 10 Kansas towns by name prefix: live first, then cities before communities, A–Z.
+
+## Town feed (Main 5:628, Player 5:2408)
+The viewer's town is their home town, or Wichita while browsing (`homeTownGeoid: null`).
+
+`GET /v1/town/home` →
+```json
+{ "ok": true, "town": { "geoid": "2079000", "name": "Wichita" }, "firstName": "Maria", "newSinceLastVisit": 5,
+  "todayNote": null, "today": { "videos": 12, "events": 6, "deals": 4 },
+  "neighborsPostingToday": [{ "id": "<userId>", "name": "Maria", "avatarTone": 0 }] }
+```
+`todayNote` (weather line) is null until a weather source exists; the apps hide it.
+
+`GET /v1/feed?category&cursor` → `{ ok, items, nextCursor }`, newest first. A page holds up to 6 videos; one
+upcoming event follows the first two and one live deal follows the event (deals only in All / Food / Shops).
+`category=events` lists upcoming events only. `nextCursor` is opaque — pass it back as `cursor`; `null` = the end.
+Items:
+- `{ type: "video", id, author: {id, name, isBusiness, isVerified, avatarTone}, title, quote, place, postedAt, isNew,
+  videoUrl, thumbnailUrl, thumbnailTone, business: {id, name, isVerified, isOpenNow, distanceMiles, dealId,
+  thumbnailUrl, thumbnailTone} | null, myReactions: [reaction] }`
+- `{ type: "event", id, title, startsAt, place, category, saved }`
+- `{ type: "deal", id, title, businessName, endsAt }`
+- `{ type: "caught_up" }` — once, where posts newer than the previous visit give way to older ones.
+
+**"New"** = posted after the previous visit. A visit is Town activity without a 30-minute gap; `/town/home` and the
+first feed page start or continue it (`profiles.townSeenAt` / `townBaselineAt`), and the cursor keeps the baseline
+fixed while paging. A first visit counts everything since local midnight (America/Chicago).
+
+**Distance** (`distanceMiles`) is measured from the viewer's home neighborhood centre (or town centre) — the API never
+stores the device location. `isOpenNow` comes from the business's weekly hours in local time; null when unknown.
+
+`PUT|DELETE /v1/posts/:id/reactions/:reaction` and `PUT|DELETE /v1/events/:id/save` → `{ ok: true, active }`;
+idempotent; unknown id → `404 not_found`, unknown reaction → `400 validation`.
+
+Collections: `posts`, `businesses`, `events`, `deals`, `postReactions`, `eventSaves` (`src/feed/model.ts`). Demo
+content: `npm run seed:feed` (everything tagged `seed: true`; `npm run seed:feed -- --remove` deletes it).
+Uploading videos (and moderation of `held` posts) comes with the Upload screen.

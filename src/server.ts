@@ -4,6 +4,7 @@ import app from './index'
 import { closeMongo, connectMongo, getDb } from './db/client'
 import { ensureIndexes } from './db/collections'
 import { ensureGeoIndexes } from './geo/model'
+import { ensureFeedIndexes } from './feed/model'
 import { loadEnv } from './env'
 import { withClientIp } from './lib/clientIp'
 
@@ -15,7 +16,7 @@ connectMongo(env)
 
 // Fail fast if the database is unreachable, and make sure the indexes exist.
 await getDb().command({ ping: 1 })
-await Promise.all([ensureIndexes(getDb()), ensureGeoIndexes(getDb())])
+await Promise.all([ensureIndexes(getDb()), ensureGeoIndexes(getDb()), ensureFeedIndexes(getDb())])
 
 const server = serve(
   {
