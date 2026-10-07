@@ -5,7 +5,10 @@
 # replica set because Better Auth's adapter uses transactions.
 services:
   api:
-    build: .
+    build:
+      context: .
+      target: deps
+    command: npm run dev
     ports:
       - "8080:8080"
     env_file: .env
@@ -13,6 +16,16 @@ services:
       PORT: "8080"
       # No proxy in front locally: client-IP headers are taken from the socket (see src/lib/clientIp.ts).
       TRUST_PROXY: "0"
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+          initial_sync: true
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
     depends_on:
       mongo:
         condition: service_healthy
