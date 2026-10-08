@@ -20,6 +20,7 @@ bearer sessions), **SendGrid**. Read `README.md`, then `docs/api.md` (the human-
 ## Git
 Commit as `Nasir Khalid <nasir.khalid.new@gmail.com>`, plain messages, no `Co-Authored-By` / `Claude-Session` /
 other trailers. Production secrets are set in the hosting dashboard, never in the repo.
+Push every commit straight to `main` (frontend and backend alike); no feature branches or PRs.
 
 ## Where things stand (2026-10-07)
 - Done: auth + sign-up state machine, towns/geo (Census), home town, terms, push-token stubs, emails, Docker,
