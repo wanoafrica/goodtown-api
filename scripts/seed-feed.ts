@@ -30,7 +30,12 @@ const CLIPS = [
   'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8',
   'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8',
 ]
-const PLACES = ['Delano', 'Riverside', 'Old Town', 'College Hill', 'Midtown']
+// Neighborhoods to seed into. Resolved against `geo_neighborhoods` (the City of Wichita association layer loaded
+// by load-kansas.ts): preferred names that exist are used first, then other active neighborhoods A–Z, so every
+// seeded document carries a real `neighborhoodId` and its `place` label equals the name the sign-up chips show.
+const PREFERRED_PLACES = ['Delano', 'Riverside', 'Old Town', 'College Hill', 'Midtown']
+const PLACE_COUNT = PREFERRED_PLACES.length
+type Hood = { id: string; name: string; center: { type: 'Point'; coordinates: [number, number] } }
 const NEIGHBOR_POSTS: Array<[string, Post['category']]> = [
   ['Sunset at the river path', 'outdoors'],
   ['Kids loved the splash pad', 'family'],
@@ -64,28 +69,30 @@ async function main() {
 
   const now = new Date()
   const today = startOfLocalDay(now)
-  const neighborhoods = await db
-    .collection<{ id: string; name: string; center: { type: 'Point'; coordinates: [number, number] } }>(
-      'geo_neighborhoods',
-    )
-    .find(
-      { townGeoid: WICHITA_GEOID, name: { $in: PLACES.map((p) => p.toUpperCase()).concat(PLACES) } },
-      { projection: { id: 1, name: 1, center: 1 } },
-    )
+  const active = await db
+    .collection<Hood>('geo_neighborhoods')
+    .find({ townGeoid: WICHITA_GEOID, active: true }, { projection: { id: 1, name: 1, center: 1 } })
+    .sort({ name: 1 })
     .toArray()
-  const hood = (place: string) => neighborhoods.find((n) => n.name.toLowerCase() === place.toLowerCase()) ?? null
+  if (active.length === 0)
+    throw new Error('geo_neighborhoods has no active Wichita rows — run `npm run load:kansas` before seeding the feed')
+  const preferred = PREFERRED_PLACES.flatMap((p) => active.filter((n) => n.name.toLowerCase() === p.toLowerCase()))
+  const places: Hood[] = preferred
+    .concat(active.filter((n) => !preferred.includes(n)))
+    .slice(0, Math.min(PLACE_COUNT, active.length))
+  const placeAt = (i: number) => places[i % places.length]!
   const weekdays = (open: string, close: string) => [0, 1, 2, 3, 4, 5, 6].map((day) => ({ day, open, close }))
 
   const businesses: Business[] = [
-    { businessId: 'b_seed_bakehouse', name: 'Sunrise Bakehouse', place: 'Delano', hours: weekdays('07:00', '15:00') },
-    { businessId: 'b_seed_coffee', name: 'Corner Coffee', place: 'Old Town', hours: weekdays('06:00', '18:00') },
-    { businessId: 'b_seed_tacos', name: 'Prairie Taco Truck', place: 'Midtown', hours: weekdays('11:00', '21:00') },
+    { businessId: 'b_seed_bakehouse', name: 'Sunrise Bakehouse', place: placeAt(0), hours: weekdays('07:00', '15:00') },
+    { businessId: 'b_seed_coffee', name: 'Corner Coffee', place: placeAt(2), hours: weekdays('06:00', '18:00') },
+    { businessId: 'b_seed_tacos', name: 'Prairie Taco Truck', place: placeAt(4), hours: weekdays('11:00', '21:00') },
   ].map((b) => ({
     businessId: b.businessId,
     name: b.name,
     townGeoid: WICHITA_GEOID,
-    neighborhoodId: hood(b.place)?.id ?? null,
-    location: hood(b.place)?.center ?? null,
+    neighborhoodId: b.place.id,
+    location: b.place.center,
     isVerified: true,
     hours: b.hours,
     thumbnailUrl: null,
@@ -104,16 +111,14 @@ async function main() {
   const posts: Post[] = Array.from({ length: 30 }, (_, i) => {
     const isBusiness = i % 2 === 1 || users.length === 0
     const business = businesses[i % businesses.length]!
-    const place = isBusiness
-      ? (hood(PLACES[i % PLACES.length]!)?.name ?? PLACES[i % PLACES.length]!)
-      : PLACES[i % PLACES.length]!
+    const place = placeAt(i)
     const hoursAgo = i < 4 ? i + 1 : 20 + i * 6
     const [neighborTitle, neighborCategory] = NEIGHBOR_POSTS[i % NEIGHBOR_POSTS.length]!
     const [businessTitle, quote] = BUSINESS_POSTS[i % BUSINESS_POSTS.length]!
     return {
       townGeoid: WICHITA_GEOID,
-      neighborhoodId: hood(place)?.id ?? null,
-      place: PLACES[i % PLACES.length]!,
+      neighborhoodId: place.id,
+      place: place.name,
       authorType: isBusiness ? 'business' : 'user',
       authorUserId: isBusiness ? null : users[i % users.length]!.userId,
       businessId: isBusiness ? business.businessId : null,
@@ -131,16 +136,16 @@ async function main() {
 
   await f.events.deleteMany({ seed: true })
   const events: TownEvent[] = [
-    ['Farmers market', 2, 9, 'Old Town', 'Family'],
-    ['Kids’ story hour', 2, 14, 'Delano', 'Family'],
-    ['Riverfront 5K', 3, 7.5, 'Riverside', 'Outdoors'],
-    ['Food truck night', 4, 18, 'Midtown', 'Food'],
-    ['Porch concert', 5, 19, 'College Hill', 'Events'],
-  ].map(([title, days, hour, place, category]) => ({
+    ['Farmers market', 2, 9, 2, 'Family'],
+    ['Kids’ story hour', 2, 14, 0, 'Family'],
+    ['Riverfront 5K', 3, 7.5, 1, 'Outdoors'],
+    ['Food truck night', 4, 18, 4, 'Food'],
+    ['Porch concert', 5, 19, 3, 'Events'],
+  ].map(([title, days, hour, placeIndex, category]) => ({
     townGeoid: WICHITA_GEOID,
     title: title as string,
     startsAt: new Date(today.getTime() + ((days as number) * 24 + (hour as number)) * 3600_000),
-    place: place as string,
+    place: placeAt(placeIndex as number).name,
     category: category as string,
     businessId: null,
     seed: true,
@@ -162,7 +167,8 @@ async function main() {
 
   console.log(
     `seeded ${businesses.length} businesses, ${posts.length} posts (${users.length} existing users as authors), ` +
-      `${events.length} events, ${deals.length} deals; neighborhoods matched: ${neighborhoods.length}/${PLACES.length}`,
+      `${events.length} events, ${deals.length} deals; neighborhoods: ${places.map((p) => p.name).join(', ')} ` +
+      `(${preferred.length}/${PREFERRED_PLACES.length} preferred found)`,
   )
   await client.close()
 }

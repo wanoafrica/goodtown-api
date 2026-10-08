@@ -111,5 +111,7 @@ stores the device location. `isOpenNow` comes from the business's weekly hours i
 idempotent; unknown id → `404 not_found`, unknown reaction → `400 validation`.
 
 Collections: `posts`, `businesses`, `events`, `deals`, `postReactions`, `eventSaves` (`src/feed/model.ts`). Demo
-content: `npm run seed:feed` (everything tagged `seed: true`; `npm run seed:feed -- --remove` deletes it).
+content: `npm run seed:feed` (everything tagged `seed: true`; `npm run seed:feed -- --remove` deletes it). Seed places are real
+rows of `geo_neighborhoods` (Delano, Riverside, Old Town, College Hill, Midtown when present, else other active Wichita
+neighborhoods A–Z), so every seeded post / business has a `neighborhoodId`; run `npm run load:kansas` first.
 Uploading videos (and moderation of `held` posts) comes with the Upload screen.
