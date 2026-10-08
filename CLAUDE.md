@@ -23,7 +23,8 @@ other trailers. Production secrets are set in the hosting dashboard, never in th
 
 ## Where things stand (2026-10-07)
 - Done: auth + sign-up state machine, towns/geo (Census), home town, terms, push-token stubs, emails, Docker,
-  Town feed (`/v1/town/home`, `/v1/feed`, reactions, event saves; `npm run seed:feed` for demo content).
+  Town feed (`/v1/town/home`, `/v1/feed` — both also open to guests, rate limited — reactions, event saves;
+  `npm run seed:feed` for demo content).
 - Next: deploy on DigitalOcean App Platform (`.do/app.yaml`), then point the apps' release `API_BASE_URL` at it;
   suspension enforcement (revoke sessions + reject in `requireSession`); video upload + moderation (posts are
   only seeded today); weather for `todayNote`; Delete-account; phone OTP; push sending.

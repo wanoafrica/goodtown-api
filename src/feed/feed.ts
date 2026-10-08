@@ -68,12 +68,18 @@ function firstName(name: string | undefined | null): string | null {
 
 // MARK: - Home
 
-export async function buildHome(db: Db, userId: string, now: Date) {
+/** Guests (no account) have no visits: "new" means since local midnight, and nothing is recorded. */
+async function baselineFor(db: Db, userId: string | null, now: Date): Promise<Date> {
+  return userId ? touchVisit(db, userId, now) : startOfLocalDay(now)
+}
+
+/** [userId] null = a guest looking around: Wichita, no first name. */
+export async function buildHome(db: Db, userId: string | null, now: Date) {
   const { profiles } = collections(db)
   const f = feedCollections(db)
-  const profile = await profiles.findOne({ userId })
+  const profile = userId ? await profiles.findOne({ userId }) : null
   const townGeoid = viewerTownGeoid(profile)
-  const baseline = await touchVisit(db, userId, now)
+  const baseline = await baselineFor(db, userId, now)
   const today = startOfLocalDay(now)
   const tomorrow = new Date(today.getTime() + 24 * 3600 * 1000)
   const published = { townGeoid, status: 'published' as const }
@@ -175,17 +181,18 @@ function dealsShown(category: FeedCategory | null) {
   return !category || category === 'food' || category === 'shops'
 }
 
+/** [userId] null = a guest: Wichita, no reactions or saves. */
 export async function buildFeedPage(
   db: Db,
-  userId: string,
+  userId: string | null,
   opts: { category: FeedCategory | null; cursor: FeedCursor | null; now: Date },
 ) {
   const { now, category } = opts
   const { profiles } = collections(db)
   const f = feedCollections(db)
-  const profile = await profiles.findOne({ userId })
+  const profile = userId ? await profiles.findOne({ userId }) : null
   const townGeoid = viewerTownGeoid(profile)
-  const baseline = opts.cursor ? new Date(opts.cursor.s) : await touchVisit(db, userId, now)
+  const baseline = opts.cursor ? new Date(opts.cursor.s) : await baselineFor(db, userId, now)
 
   const postFilter: Filter<Post> = { townGeoid, status: 'published' }
   if (category && category !== 'events') postFilter.category = category
@@ -227,8 +234,8 @@ export async function buildFeedPage(
   const [authors, businesses, reactions, saves, liveDeals, viewerPoint] = await Promise.all([
     profiles.find({ userId: { $in: userIds } }, { projection: { userId: 1, name: 1 } }).toArray(),
     f.businesses.find({ businessId: { $in: businessIds } }).toArray(),
-    f.reactions.find({ userId, postId: { $in: postIds } }).toArray(),
-    f.eventSaves.find({ userId, eventId: { $in: eventIds } }).toArray(),
+    userId ? f.reactions.find({ userId, postId: { $in: postIds } }).toArray() : Promise.resolve([]),
+    userId ? f.eventSaves.find({ userId, eventId: { $in: eventIds } }).toArray() : Promise.resolve([]),
     f.deals
       .find(
         { businessId: { $in: businessIds }, startsAt: { $lte: now }, endsAt: { $gt: now } },

@@ -31,30 +31,57 @@ export function evictSessionFrom(headers: Headers) {
   evictSession(bearerToken(headers))
 }
 
-/** Resolves the Better Auth session from the Bearer token (or cookie) and rejects with 401 if absent. */
-export const requireSession = createMiddleware<{ Bindings: Env; Variables: AppVariables }>(async (c, next) => {
-  const token = bearerToken(c.req.raw.headers)
+/** The Better Auth session behind the request's Bearer token (or cookie), or null when there is none. */
+async function resolveSession(headers: Headers, env: Env): Promise<Cached | null> {
+  const token = bearerToken(headers)
   const now = Date.now()
   const hit = token ? cache.get(token) : undefined
-  if (hit && hit.expiresAt > now) {
-    c.set('user', hit.user)
-    c.set('sessionId', hit.sessionId)
-    return next()
-  }
+  if (hit && hit.expiresAt > now) return hit
 
-  const auth = createAuth(c.env)
-  const session = await auth.api.getSession({ headers: c.req.raw.headers })
+  const auth = createAuth(env)
+  const session = await auth.api.getSession({ headers })
   if (!session) {
     evictSession(token)
-    throw new ApiError(401, 'unauthorized', 'Sign in first')
+    return null
   }
   const user: SessionUser = { id: session.user.id, email: session.user.email, name: session.user.name ?? null }
-  c.set('user', user)
-  c.set('sessionId', session.session.id)
+  const resolved: Cached = { user, sessionId: session.session.id, expiresAt: 0 }
   if (token) {
     if (cache.size >= SESSION_CACHE_MAX) cache.delete(cache.keys().next().value!)
     const ttl = Math.min(SESSION_CACHE_MS, new Date(session.session.expiresAt).getTime() - now)
-    if (ttl > 0) cache.set(token, { user, sessionId: session.session.id, expiresAt: now + ttl })
+    if (ttl > 0) cache.set(token, { ...resolved, expiresAt: now + ttl })
   }
+  return resolved
+}
+
+/** Resolves the Better Auth session from the Bearer token (or cookie) and rejects with 401 if absent. */
+export const requireSession = createMiddleware<{ Bindings: Env; Variables: AppVariables }>(async (c, next) => {
+  const session = await resolveSession(c.req.raw.headers, c.env)
+  if (!session) throw new ApiError(401, 'unauthorized', 'Sign in first')
+  c.set('user', session.user)
+  c.set('sessionId', session.sessionId)
+  await next()
+})
+
+/** Better Auth's session cookie (default prefix; `__Secure-` over HTTPS). Other cookies do not make a viewer. */
+const SESSION_COOKIE = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=/
+
+export type GuestVariables = { user: SessionUser | null; sessionId: string | null }
+
+/**
+ * For routes a guest may read ("Looking around", Figma GuestTown 106:34): no credentials → `user` is null.
+ * Credentials that do not resolve still answer 401, so a signed-in app whose session died learns it here too.
+ */
+export const optionalSession = createMiddleware<{ Bindings: Env; Variables: GuestVariables }>(async (c, next) => {
+  const h = c.req.raw.headers
+  if (!bearerToken(h) && !SESSION_COOKIE.test(h.get('cookie') ?? '')) {
+    c.set('user', null)
+    c.set('sessionId', null)
+    return next()
+  }
+  const session = await resolveSession(c.req.raw.headers, c.env)
+  if (!session) throw new ApiError(401, 'unauthorized', 'Sign in first')
+  c.set('user', session.user)
+  c.set('sessionId', session.sessionId)
   await next()
 })

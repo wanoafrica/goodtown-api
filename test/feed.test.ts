@@ -211,6 +211,30 @@ describe('feed', () => {
     expect(events.nextCursor).toBeNull()
   })
 
+  it('serves a guest (no account): Wichita, new since midnight, nothing of mine, no visit recorded', async () => {
+    const f = feedCollections(db)
+    const ids = (
+      await f.posts.insertMany([post(0, hoursAgo(1)), post(1, hoursAgo(2)), post(2, hoursAgo(14))])
+    ).insertedIds
+    await f.reactions.insertOne({ postId: ids[0]!.toHexString(), userId: user, reaction: 'love', createdAt: now })
+    const profilesBefore = await collections(db).profiles.find().toArray()
+
+    const home = await buildHome(db, null, now)
+    expect(home.town.geoid).toBe(WICHITA_GEOID)
+    expect(home.firstName).toBeNull()
+    expect(home.newSinceLastVisit).toBe(2)
+
+    const page = await buildFeedPage(db, null, { category: null, cursor: null, now })
+    expect(page.items.map((i) => (i.type === 'video' ? `v${i.isNew ? '+' : '-'}` : i.type))).toEqual([
+      'v+',
+      'v+',
+      'caught_up',
+      'v-',
+    ])
+    expect(videos(page.items).every((v) => v.myReactions.length === 0)).toBe(true)
+    expect(await collections(db).profiles.find().toArray()).toEqual(profilesBefore)
+  })
+
   it('pages a full page size', () => {
     expect(PAGE_VIDEOS).toBe(6)
   })
@@ -251,7 +275,13 @@ describe('feed routes over HTTP (real Better Auth session)', () => {
     const auth = { Authorization: `Bearer ${await bearer()}` }
     const call = (path: string, method = 'GET') => app.request(path, { method, headers: auth }, env)
 
-    expect((await app.request('/v1/feed', {}, env)).status).toBe(401)
+    // Guests may read; writes and dead credentials answer 401.
+    const guest = await (await app.request('/v1/feed', {}, env)).json()
+    expect(guest).toMatchObject({ ok: true })
+    expect(await (await app.request('/v1/town/home', {}, env)).json()).toMatchObject({ ok: true, firstName: null })
+    expect((await app.request(`/v1/posts/${postId}/reactions/love`, { method: 'PUT' }, env)).status).toBe(401)
+    expect((await app.request(`/v1/events/${eventId}/save`, { method: 'PUT' }, env)).status).toBe(401)
+    expect((await app.request('/v1/feed', { headers: { Authorization: 'Bearer nope' } }, env)).status).toBe(401)
 
     const home = await (await call('/v1/town/home')).json()
     expect(home).toMatchObject({ ok: true, town: { geoid: WICHITA_GEOID }, firstName: 'Http' })

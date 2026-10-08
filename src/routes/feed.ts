@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { describeRoute, resolver, validator } from 'hono-openapi'
 import { ObjectId } from 'mongodb'
 import { z } from 'zod'
@@ -8,7 +8,8 @@ import { buildFeedPage, buildHome, decodeCursor } from '../feed/feed'
 import { FEED_CATEGORIES, feedCollections, REACTIONS } from '../feed/model'
 import { ApiError } from '../lib/errors'
 import { validationHook } from '../lib/validate'
-import { requireSession, type AppVariables } from '../middleware/session'
+import { rateLimit } from '../middleware/rateLimit'
+import { optionalSession, type GuestVariables } from '../middleware/session'
 import { errorSchema, feedResponse, toggleResponse, townHomeResponse } from '../openapi/schemas'
 
 /**
@@ -19,13 +20,36 @@ import { errorSchema, feedResponse, toggleResponse, townHomeResponse } from '../
  *   DELETE /v1/posts/:id/reactions/:reaction
  *   PUT    /v1/events/:id/save                   "Save" on an event card
  *   DELETE /v1/events/:id/save
+ *
+ * The two GETs also serve guests ("Looking around", Figma GuestTown 106:34): no credentials → Wichita, nothing
+ * marked as mine, rate limited per IP. Reactions and saves need an account (401).
  */
-export const feedRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>()
+export const feedRoutes = new Hono<{ Bindings: Env; Variables: GuestVariables }>()
 
-feedRoutes.use('*', requireSession)
+feedRoutes.use('*', optionalSession)
+
+/** Guests only: 120 reads a minute per IP is a lot of scrolling, and a ceiling on anonymous scraping. */
+const guestLimit = rateLimit<GuestVariables>({ windowMs: 60_000, max: 120, skip: (c) => c.get('user') !== null })
+
+/** The signed-in viewer's id; guests get 401 (the apps show the "Join Goodtown to do that" sheet first). */
+function viewerId(c: Context<{ Bindings: Env; Variables: GuestVariables }>): string {
+  const user = c.get('user')
+  if (!user) throw new ApiError(401, 'unauthorized', 'Sign in first')
+  return user.id
+}
+
+/** Optional bearer: guests may call without one. */
+const optionalBearer: Array<Record<string, string[]>> = [{ bearerAuth: [] }, {}]
 
 const noSession = {
   401: { description: 'No session', content: { 'application/json': { schema: resolver(errorSchema) } } },
+}
+const guestRead = {
+  401: {
+    description: 'Credentials sent but the session is gone (no credentials = guest)',
+    content: { 'application/json': { schema: resolver(errorSchema) } },
+  },
+  429: { description: '`rate_limited` (guests)', content: { 'application/json': { schema: resolver(errorSchema) } } },
 }
 const notFound = {
   404: { description: '`not_found`', content: { 'application/json': { schema: resolver(errorSchema) } } },
@@ -38,14 +62,16 @@ feedRoutes.get(
     summary: 'Town header',
     description:
       'Greeting, "N new since you last looked", today counts and neighbors posting today, for the viewer’s home town ' +
-      '(Wichita while browsing). Also starts a visit: posts after the previous visit are "new" (30 min gap = new visit).',
-    security: [{ bearerAuth: [] }],
+      '(Wichita while browsing). Also starts a visit: posts after the previous visit are "new" (30 min gap = new visit). ' +
+      'Without a session (guest): Wichita, no first name, "new" = since local midnight.',
+    security: optionalBearer,
     responses: {
       200: { description: 'OK', content: { 'application/json': { schema: resolver(townHomeResponse) } } },
-      ...noSession,
+      ...guestRead,
     },
   }),
-  async (c) => c.json({ ok: true, ...(await buildHome(getDb(), c.get('user').id, new Date())) }),
+  guestLimit,
+  async (c) => c.json({ ok: true, ...(await buildHome(getDb(), c.get('user')?.id ?? null, new Date())) }),
 )
 
 feedRoutes.get(
@@ -56,11 +82,11 @@ feedRoutes.get(
     description:
       'Newest first. Each page: up to 6 videos with one upcoming event after the first two and one live deal after the ' +
       'event; `caught_up` once where new posts give way to older ones. `category=events` lists events only. ' +
-      'Pass `nextCursor` back as `cursor`; null means the end.',
-    security: [{ bearerAuth: [] }],
+      'Pass `nextCursor` back as `cursor`; null means the end. Guests get Wichita with no reactions or saves.',
+    security: optionalBearer,
     responses: {
       200: { description: 'OK', content: { 'application/json': { schema: resolver(feedResponse) } } },
-      ...noSession,
+      ...guestRead,
     },
   }),
   validator(
@@ -71,11 +97,12 @@ feedRoutes.get(
     }),
     validationHook,
   ),
+  guestLimit,
   async (c) => {
     const { category, cursor: rawCursor } = c.req.valid('query')
     const cursor = rawCursor ? decodeCursor(rawCursor) : null
     if (rawCursor && !cursor) throw new ApiError(400, 'validation', 'Invalid cursor')
-    const page = await buildFeedPage(getDb(), c.get('user').id, {
+    const page = await buildFeedPage(getDb(), c.get('user')?.id ?? null, {
       category: !category || category === 'all' ? null : category,
       cursor,
       now: new Date(),
@@ -105,7 +132,7 @@ for (const method of ['put', 'delete'] as const) {
     validator('param', idParam.extend({ reaction: z.enum(REACTIONS) }), validationHook),
     async (c) => {
       const { id, reaction } = c.req.valid('param')
-      const userId = c.get('user').id
+      const userId = viewerId(c)
       const f = feedCollections(getDb())
       if (!(await f.posts.findOne({ _id: new ObjectId(id), status: 'published' }, { projection: { _id: 1 } }))) {
         throw new ApiError(404, 'not_found', 'Unknown video')
@@ -139,7 +166,7 @@ for (const method of ['put', 'delete'] as const) {
     validator('param', idParam, validationHook),
     async (c) => {
       const { id } = c.req.valid('param')
-      const userId = c.get('user').id
+      const userId = viewerId(c)
       const f = feedCollections(getDb())
       if (!(await f.events.findOne({ _id: new ObjectId(id) }, { projection: { _id: 1 } }))) {
         throw new ApiError(404, 'not_found', 'Unknown event')

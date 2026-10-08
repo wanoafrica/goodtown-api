@@ -1,3 +1,4 @@
+import type { Context } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import type { Env } from '../env'
 import { ApiError } from '../lib/errors'
@@ -8,10 +9,17 @@ import { clientIp } from '../lib/clientIp'
  * itself). In-memory, so it is per process — fine while the app runs as one instance (`.do/app.yaml`
  * `instance_count: 1`); move the counters to MongoDB before scaling out.
  */
-export function rateLimit(opts: { windowMs: number; max: number; maxKeys?: number }) {
+export function rateLimit<V extends object = object>(opts: {
+  windowMs: number
+  max: number
+  maxKeys?: number
+  /** Requests this returns true for are not counted (e.g. signed-in viewers on a route guests may also call). */
+  skip?: (c: Context<{ Bindings: Env; Variables: V }>) => boolean
+}) {
   const maxKeys = opts.maxKeys ?? 10_000
   const hits = new Map<string, { count: number; resetAt: number }>()
-  return createMiddleware<{ Bindings: Env }>(async (c, next) => {
+  return createMiddleware<{ Bindings: Env; Variables: V }>(async (c, next) => {
+    if (opts.skip?.(c)) return next()
     const now = Date.now()
     const key = clientIp(c.req.raw.headers, c.env)
     let entry = hits.get(key)

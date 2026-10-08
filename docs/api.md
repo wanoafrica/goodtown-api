@@ -81,6 +81,12 @@ Only these four are reachable; every other Better Auth path answers `404 not_fou
 ## Town feed (Main 5:628, Player 5:2408)
 The viewer's town is their home town, or Wichita while browsing (`homeTownGeoid: null`).
 
+**Guests** ("Looking around", no account — Figma GuestTown 106:34): `GET /v1/town/home` and `GET /v1/feed` also answer
+without credentials. A guest gets Wichita, `firstName: null`, "new" = since local midnight (no visit is recorded),
+`myReactions: []` and `saved: false`; guest reads are limited to 120 a minute per IP (`429 rate_limited`). Credentials
+that are sent but no longer resolve still answer `401`. Reactions and event saves always need a session (`401`); the
+apps show the "Join Goodtown to do that" sheet (GuestJoin 106:226) instead of calling them.
+
 `GET /v1/town/home` →
 ```json
 { "ok": true, "town": { "geoid": "2079000", "name": "Wichita" }, "firstName": "Maria", "newSinceLastVisit": 5,
