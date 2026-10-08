@@ -46,6 +46,7 @@ The iOS repositories (`ios/Goodtown/Data/`) mirror these names and calls one-to-
 | `FeedRepository.feed(category, cursor)` | `GET /v1/feed?category=all\|food\|events\|family\|outdoors\|shops\|sports&cursor=` |
 | `FeedRepository.setReaction(r, postId, active)` | `PUT` / `DELETE /v1/posts/:id/reactions/:reaction` (`want_to_go`, `love`, `been_there`, `save`, `thanks`) |
 | `FeedRepository.setEventSaved(eventId, saved)` | `PUT` / `DELETE /v1/events/:id/save` |
+| `FeedRepository.explore()` | `GET /v1/explore` |
 
 ## Town object
 ```json
@@ -116,8 +117,22 @@ stores the device location. `isOpenNow` comes from the business's weekly hours i
 `PUT|DELETE /v1/posts/:id/reactions/:reaction` and `PUT|DELETE /v1/events/:id/save` → `{ ok: true, active }`;
 idempotent; unknown id → `404 not_found`, unknown reaction → `400 validation`.
 
-Collections: `posts`, `businesses`, `events`, `deals`, `postReactions`, `eventSaves` (`src/feed/model.ts`). Demo
+Collections: `posts`, `businesses`, `events`, `deals`, `postReactions`, `eventSaves`, `originals` (`src/feed/model.ts`). Demo
 content: `npm run seed:feed` (everything tagged `seed: true`; `npm run seed:feed -- --remove` deletes it). Seed places are real
 rows of `geo_neighborhoods` (Delano, Riverside, Old Town, College Hill, Midtown when present, else other active Wichita
 neighborhoods A–Z), so every seeded post / business has a `neighborhoodId`; run `npm run load:kansas` first.
 Uploading videos (and moderation of `held` posts) comes with the Upload screen.
+
+## Explore (5:26)
+`GET /v1/explore` (guests too, same limit as the feed) →
+```json
+{ "ok": true, "town": { "geoid": "2079000", "name": "Wichita" },
+  "localVoices": [{ "id": "<userId>", "name": "Maria", "topic": "Delano food", "avatarTone": 0 }],
+  "original": { "id": "<id>", "title": "The baker who opens at 4 AM", "place": "Old Town", "minutes": 3, "videoUrl": null },
+  "neighborhoods": [{ "id": "wichita_city:DELANO", "name": "Delano" }] }
+```
+- `localVoices`: up to 10 neighbors who posted most in the last 30 days; `topic` = their most common neighborhood +
+  category ("Delano food"), null when unknown.
+- `original`: the newest Goodtown Original (`originals` collection) whose `publishedAt` has passed; null hides the card.
+  Seeded by `npm run seed:feed`.
+- `neighborhoods`: up to 6 where people posted most in the last 30 days; A–Z when nobody has posted yet.

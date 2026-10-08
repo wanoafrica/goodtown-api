@@ -159,3 +159,31 @@ export const townHomeResponse = z.object({
 })
 
 export const toggleResponse = z.object({ ok: z.literal(true), active: z.boolean() })
+
+// MARK: - Explore (Figma 5:26)
+
+export const exploreResponse = z.object({
+  ok: z.literal(true),
+  town: z.object({ geoid: z.string(), name: z.string() }),
+  localVoices: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        topic: z.string().nullable().describe('Their usual neighborhood + category, e.g. "Delano food"'),
+        avatarTone: z.number().int(),
+      }),
+    )
+    .describe('Neighbors who posted most in the last 30 days'),
+  original: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      place: z.string(),
+      minutes: z.number().int(),
+      videoUrl: z.string().nullable(),
+    })
+    .nullable()
+    .describe('Newest Goodtown Original; null hides the card'),
+  neighborhoods: z.array(neighborhoodSchema).describe('Busiest in the last 30 days, else A–Z'),
+})

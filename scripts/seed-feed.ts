@@ -1,7 +1,7 @@
 /**
  * Demo content for the Town feed and Player until real uploads exist (Upload screen not built yet):
  * verified businesses in real Wichita neighborhoods, posts with public sample clips, upcoming events and
- * today's deals. Every document carries `seed: true`.
+ * today's deals, one Goodtown Original (Explore). Every document carries `seed: true`.
  *
  *   npm run seed:feed            add (or refresh) the demo content
  *   npm run seed:feed -- --remove   delete every seeded document again
@@ -59,10 +59,10 @@ async function main() {
 
   if (process.argv.includes('--remove')) {
     const counts = await Promise.all(
-      [f.posts, f.events, f.deals, f.businesses].map((c) => c.deleteMany({ seed: true })),
+      [f.posts, f.events, f.deals, f.businesses, f.originals].map((c) => c.deleteMany({ seed: true })),
     )
-    const [posts, events, deals, businesses] = counts.map((r) => r.deletedCount)
-    console.log(`removed ${posts} posts, ${events} events, ${deals} deals, ${businesses} businesses`)
+    const [posts, events, deals, businesses, originals] = counts.map((r) => r.deletedCount)
+    console.log(`removed ${posts} posts, ${events} events, ${deals} deals, ${businesses} businesses, ${originals} originals`)
     await client.close()
     return
   }
@@ -165,9 +165,23 @@ async function main() {
   }))
   await f.deals.insertMany(deals)
 
+  // Explore's "Goodtown Originals" card (5:72): one short film, published last Friday.
+  await f.originals.deleteMany({ seed: true })
+  const lastFriday = new Date(today.getTime() - (((today.getUTCDay() + 2) % 7) * 24 * 3600_000))
+  await f.originals.insertOne({
+    townGeoid: WICHITA_GEOID,
+    title: 'The baker who opens at 4 AM',
+    place: placeAt(2).name,
+    durationSec: 180,
+    videoUrl: CLIPS[3]!,
+    publishedAt: lastFriday,
+    seed: true,
+    createdAt: now,
+  })
+
   console.log(
     `seeded ${businesses.length} businesses, ${posts.length} posts (${users.length} existing users as authors), ` +
-      `${events.length} events, ${deals.length} deals; neighborhoods: ${places.map((p) => p.name).join(', ')} ` +
+      `${events.length} events, ${deals.length} deals, 1 original; neighborhoods: ${places.map((p) => p.name).join(', ')} ` +
       `(${preferred.length}/${PREFERRED_PLACES.length} preferred found)`,
   )
   await client.close()

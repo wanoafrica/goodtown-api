@@ -12,6 +12,7 @@ import {
   type FeedItemOut,
   type VideoItem,
 } from '../src/feed/feed'
+import { buildExplore } from '../src/feed/explore'
 import { ensureFeedIndexes, feedCollections, type Post } from '../src/feed/model'
 import { isOpenNow, startOfLocalDay, tone } from '../src/feed/time'
 import { WICHITA_GEOID } from '../src/geo/model'
@@ -235,6 +236,31 @@ describe('feed', () => {
     expect(await collections(db).profiles.find().toArray()).toEqual(profilesBefore)
   })
 
+  it('builds Explore: local voices with their usual place + category, the newest original', async () => {
+    const f = feedCollections(db)
+    // author-0 (Maria) posts most, mostly food in Delano; author-1 (James) once, outdoors in Riverside.
+    await f.posts.insertMany([
+      post(0, hoursAgo(1), { authorUserId: 'author-0', category: 'food', place: 'Delano' }),
+      post(1, hoursAgo(2), { authorUserId: 'author-0', category: 'food', place: 'Delano' }),
+      post(2, hoursAgo(3), { authorUserId: 'author-0', category: 'family', place: 'Old Town' }),
+      post(3, hoursAgo(4), { authorUserId: 'author-1', category: 'outdoors', place: 'Riverside' }),
+      post(4, hoursAgo(24 * 40), { authorUserId: 'author-2' }), // older than 30 days: not a voice
+    ])
+    await f.originals.insertMany([
+      { townGeoid: WICHITA_GEOID, title: 'Old', place: 'Delano', durationSec: 60, videoUrl: null, publishedAt: hoursAgo(200), createdAt: now },
+      { townGeoid: WICHITA_GEOID, title: 'Baker', place: 'Old Town', durationSec: 170, videoUrl: null, publishedAt: hoursAgo(20), createdAt: now },
+      { townGeoid: WICHITA_GEOID, title: 'Future', place: 'Delano', durationSec: 60, videoUrl: null, publishedAt: new Date(now.getTime() + 3600_000), createdAt: now },
+    ])
+
+    const explore = await buildExplore(db, null, now)
+    expect(explore.town.geoid).toBe(WICHITA_GEOID)
+    expect(explore.localVoices.map((v) => [v.name, v.topic])).toEqual([
+      ['Maria', 'Delano food'],
+      ['James', 'Riverside outdoors'],
+    ])
+    expect(explore.original).toMatchObject({ title: 'Baker', place: 'Old Town', minutes: 3 })
+  })
+
   it('pages a full page size', () => {
     expect(PAGE_VIDEOS).toBe(6)
   })
@@ -279,6 +305,7 @@ describe('feed routes over HTTP (real Better Auth session)', () => {
     const guest = await (await app.request('/v1/feed', {}, env)).json()
     expect(guest).toMatchObject({ ok: true })
     expect(await (await app.request('/v1/town/home', {}, env)).json()).toMatchObject({ ok: true, firstName: null })
+    expect(await (await app.request('/v1/explore', {}, env)).json()).toMatchObject({ ok: true, localVoices: [] })
     expect((await app.request(`/v1/posts/${postId}/reactions/love`, { method: 'PUT' }, env)).status).toBe(401)
     expect((await app.request(`/v1/events/${eventId}/save`, { method: 'PUT' }, env)).status).toBe(401)
     expect((await app.request('/v1/feed', { headers: { Authorization: 'Bearer nope' } }, env)).status).toBe(401)

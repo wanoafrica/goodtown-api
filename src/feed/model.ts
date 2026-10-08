@@ -81,6 +81,21 @@ export interface Deal {
   createdAt: Date
 }
 
+/** "Goodtown Originals · new every Friday" (Explore 5:72): short films made by Goodtown about a town. */
+export interface Original {
+  _id?: ObjectId
+  townGeoid: string
+  title: string
+  /** Neighborhood display name ("Old Town"). */
+  place: string
+  durationSec: number
+  videoUrl: string | null
+  /** Shown from this moment on; the newest published one is featured. */
+  publishedAt: Date
+  seed?: boolean
+  createdAt: Date
+}
+
 export interface PostReaction {
   _id?: ObjectId
   postId: string
@@ -104,6 +119,7 @@ export function feedCollections(db: Db) {
     deals: db.collection<Deal>('deals'),
     reactions: db.collection<PostReaction>('postReactions'),
     eventSaves: db.collection<EventSave>('eventSaves'),
+    originals: db.collection<Original>('originals'),
   }
 }
 
@@ -120,5 +136,6 @@ export async function ensureFeedIndexes(db: Db) {
     f.reactions.createIndex({ postId: 1, userId: 1, reaction: 1 }, { unique: true }),
     f.reactions.createIndex({ userId: 1, postId: 1 }),
     f.eventSaves.createIndex({ eventId: 1, userId: 1 }, { unique: true }),
+    f.originals.createIndex({ townGeoid: 1, publishedAt: -1 }),
   ])
 }

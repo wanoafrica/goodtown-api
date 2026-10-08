@@ -4,24 +4,26 @@ import { ObjectId } from 'mongodb'
 import { z } from 'zod'
 import type { Env } from '../env'
 import { getDb } from '../db/client'
+import { buildExplore } from '../feed/explore'
 import { buildFeedPage, buildHome, decodeCursor } from '../feed/feed'
 import { FEED_CATEGORIES, feedCollections, REACTIONS } from '../feed/model'
 import { ApiError } from '../lib/errors'
 import { validationHook } from '../lib/validate'
 import { rateLimit } from '../middleware/rateLimit'
 import { optionalSession, type GuestVariables } from '../middleware/session'
-import { errorSchema, feedResponse, toggleResponse, townHomeResponse } from '../openapi/schemas'
+import { errorSchema, exploreResponse, feedResponse, toggleResponse, townHomeResponse } from '../openapi/schemas'
 
 /**
  * Town tab + Player (Figma Main 5:628, Player 5:2408). Mounted at /v1:
  *   GET    /v1/town/home                         header: greeting, today counts, neighbors posting today
  *   GET    /v1/feed?category&cursor              the endless feed, a page at a time
+ *   GET    /v1/explore                           Explore (5:26): local voices, the Goodtown Original, neighborhoods
  *   PUT    /v1/posts/:id/reactions/:reaction     want_to_go · love · been_there · save · thanks
  *   DELETE /v1/posts/:id/reactions/:reaction
  *   PUT    /v1/events/:id/save                   "Save" on an event card
  *   DELETE /v1/events/:id/save
  *
- * The two GETs also serve guests ("Looking around", Figma GuestTown 106:34): no credentials → Wichita, nothing
+ * The GETs also serve guests ("Looking around", Figma GuestTown 106:34): no credentials → Wichita, nothing
  * marked as mine, rate limited per IP. Reactions and saves need an account (401).
  */
 export const feedRoutes = new Hono<{ Bindings: Env; Variables: GuestVariables }>()
@@ -109,6 +111,24 @@ feedRoutes.get(
     })
     return c.json({ ok: true, ...page })
   },
+)
+
+feedRoutes.get(
+  '/explore',
+  describeRoute({
+    tags: ['Feed'],
+    summary: 'Explore',
+    description:
+      'Explore tab (Figma 5:26) for the viewer’s town (Wichita for guests): local voices (top posters of the last ' +
+      '30 days with their usual neighborhood + category), the newest Goodtown Original, and the busiest neighborhoods.',
+    security: optionalBearer,
+    responses: {
+      200: { description: 'OK', content: { 'application/json': { schema: resolver(exploreResponse) } } },
+      ...guestRead,
+    },
+  }),
+  guestLimit,
+  async (c) => c.json({ ok: true, ...(await buildExplore(getDb(), c.get('user')?.id ?? null, new Date())) }),
 )
 
 const idParam = z.object({ id: z.string().refine(ObjectId.isValid, 'not an id') })
